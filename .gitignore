@@ -15,3 +15,5 @@ CMakeSettings.json
 *.synctex.gz
 __latexindent_temp.tex
 *.synctex(busy)
+
+out/*
