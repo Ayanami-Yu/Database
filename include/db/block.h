@@ -6,6 +6,27 @@
 // 最小分配单元要比block大得多。
 // block的布局如下，每个slot占用2B，这要求block最大为64KB。由于记录和索引要求按照4B对
 // 齐，BLOCK_DATA、BLOCK_TRAILER也要求8B对齐。
+// 
+// 采用一表一文件；
+// 增加一条记录：先在 free space 中分配空间给记录；
+// slots 是按照键排序的；
+// trailer 放 checksum；
+// free space 受上下两侧挤压；
+// 删除记录：将 Header 中的 tombstone bit 置为1，因为不一定立即回收该空间。比如，当 free space 满时再去回收。
+// 此时需要扫描 block 上的所有记录，接着对记录间的空间压缩。
+// 
+// Header 需包含：
+// free space 起始位置对应的偏移量；
+// slots 所含条数n；
+// 指向下一个 block 的 next 指针；
+// sizeof(offset) == short 固定（64k，包括 Header 和 slots 中的 offset）
+// 
+// 从整个文件看：
+// 第一个 block 为 superblock，其余为 datablock；
+// 所有 block 组织成2个链表，一个为数据链，另一个存放空闲的 block；
+// superblock 和 datablock 的长度不同，前者存元数据所以所需空间更小。
+// 
+// CRUD中：插入和搜索已实现，需要实现更新和删除。
 //
 // +--------------------+
 // |   common header    |
@@ -128,7 +149,7 @@ class Block
     // 关联buffer
     inline void attach(unsigned char *buffer) { buffer_ = buffer; }
     inline void detach() { buffer_ = NULL; }
-
+    
     // 设定magic
     inline void setMagic()
     {

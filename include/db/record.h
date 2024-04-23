@@ -5,9 +5,11 @@
 // 采用类似MySQL的记录方案，一条记录分为四个部分：
 // Header+记录总长度+字段长度数组+字段
 // 1. 记录总长度从最开始算；
-// 2. 字段长度是一个逆序变长数组，记录每条记录从Header开始的头部偏移量位置；
+// 2. 字段长度是一个逆序变长数组，记录每条记录从Header开始的头部偏移量位置（因此offset1 = 0）；
 // 3. Header存放一些相关信息，1B；
-// 4. 然后是各字段顺序摆放；
+// 4. offsetn之前的length字段记录整条记录的长度；
+// 5. 可在Header中添加一个bit表示重复键；
+// 6. 然后是各字段顺序摆放；
 //
 // Header中1B的表示如下：
 // | T | M | x | x | x | x | x | x |
@@ -42,6 +44,8 @@ const unsigned char RECORD_FULL_END = 0x03;   // 记录结束
 
 struct iovec
 {
+    // f1 -> iov_base -> buffer（内存）
+    // buffer 大小由 iov_len 给出
     void *iov_base; /* Pointer to data.  */
     size_t iov_len; /* Length of data.  */
 };
@@ -83,6 +87,7 @@ class Record
     // 从buffer拷贝各字段
     bool get(std::vector<struct iovec> &iov, unsigned char *header);
     // 从buffer拷贝某个字段
+    // 实际上不进行拷贝，而是将 iov_base 指向 buffer
     bool getByIndex(char *buffer, unsigned int *len, unsigned int index);
     // 从buffer引用各字段
     bool ref(std::vector<struct iovec> &iov, unsigned char *header);
