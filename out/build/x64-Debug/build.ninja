@@ -300,6 +300,14 @@ build tests\CMakeFiles\utest.dir\db\x.cc.obj: CXX_COMPILER__utest_unscanned_Debu
   TARGET_COMPILE_PDB = tests\CMakeFiles\utest.dir\
   TARGET_PDB = bin\utest.pdb
 
+build tests\CMakeFiles\utest.dir\db\xTest.cc.obj: CXX_COMPILER__utest_unscanned_Debug C$:\Users\yu\Projects\db\tests\db\xTest.cc || cmake_object_order_depends_target_utest
+  FLAGS = /DWIN32 /D_WINDOWS /W3 /GR /EHsc /WX /EHsc /Oy- /utf-8 /FI C:/Users/yu/Projects/db/include/db/config.h /MDd /Zi /Ob0 /Od /RTC1 /D DEBUG /Zi /Od
+  INCLUDES = -IC:\Users\yu\Projects\db\include -IC:\Users\yu\Projects\db\src
+  OBJECT_DIR = tests\CMakeFiles\utest.dir
+  OBJECT_FILE_DIR = tests\CMakeFiles\utest.dir\db
+  TARGET_COMPILE_PDB = tests\CMakeFiles\utest.dir\
+  TARGET_PDB = bin\utest.pdb
+
 
 # =============================================================================
 # Link build statements for EXECUTABLE target utest
@@ -308,7 +316,7 @@ build tests\CMakeFiles\utest.dir\db\x.cc.obj: CXX_COMPILER__utest_unscanned_Debu
 #############################################
 # Link the executable bin\utest.exe
 
-build bin\utest.exe: CXX_EXECUTABLE_LINKER__utest_Debug tests\CMakeFiles\utest.dir\test.cc.obj tests\CMakeFiles\utest.dir\db\integerTest.cc.obj tests\CMakeFiles\utest.dir\db\checksumTest.cc.obj tests\CMakeFiles\utest.dir\db\fileTest.cc.obj tests\CMakeFiles\utest.dir\db\datatypeTest.cc.obj tests\CMakeFiles\utest.dir\db\timestampTest.cc.obj tests\CMakeFiles\utest.dir\db\recordTest.cc.obj tests\CMakeFiles\utest.dir\db\bufferTest.cc.obj tests\CMakeFiles\utest.dir\db\schemaTest.cc.obj tests\CMakeFiles\utest.dir\db\blockTest.cc.obj tests\CMakeFiles\utest.dir\db\tableTest.cc.obj tests\CMakeFiles\utest.dir\db\x.cc.obj | bin\dbimpl.lib || bin\dbimpl.lib
+build bin\utest.exe: CXX_EXECUTABLE_LINKER__utest_Debug tests\CMakeFiles\utest.dir\test.cc.obj tests\CMakeFiles\utest.dir\db\integerTest.cc.obj tests\CMakeFiles\utest.dir\db\checksumTest.cc.obj tests\CMakeFiles\utest.dir\db\fileTest.cc.obj tests\CMakeFiles\utest.dir\db\datatypeTest.cc.obj tests\CMakeFiles\utest.dir\db\timestampTest.cc.obj tests\CMakeFiles\utest.dir\db\recordTest.cc.obj tests\CMakeFiles\utest.dir\db\bufferTest.cc.obj tests\CMakeFiles\utest.dir\db\schemaTest.cc.obj tests\CMakeFiles\utest.dir\db\blockTest.cc.obj tests\CMakeFiles\utest.dir\db\tableTest.cc.obj tests\CMakeFiles\utest.dir\db\x.cc.obj tests\CMakeFiles\utest.dir\db\xTest.cc.obj | bin\dbimpl.lib || bin\dbimpl.lib
   FLAGS = /DWIN32 /D_WINDOWS /W3 /GR /EHsc /WX /EHsc /Oy- /utf-8 /FI C:/Users/yu/Projects/db/include/db/config.h /MDd /Zi /Ob0 /Od /RTC1 /D DEBUG /Zi /Od
   LINK_FLAGS = /NXCOMPAT /INCREMENTAL:NO /DYNAMICBASE /DEBUG /NXCOMPAT /INCREMENTAL:NO /OPT:REF /OPT:ICF /VERBOSE:ICF /VERBOSE:REF /subsystem:console
   LINK_LIBRARIES = bin\dbimpl.lib  kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib
