@@ -409,6 +409,16 @@ DataBlock::insertRecord(std::vector<struct iovec> &iov)
     return std::pair<bool, unsigned short>(true, index);
 }
 
+bool updateRecord(std::vector<struct iovec>& iov)
+{
+    return true;
+}
+
+bool removeRecord(std::vector<struct iovec>& iov) 
+{ 
+    return true; 
+}
+
 bool DataBlock::copyRecord(Record &record)
 {
     // 判断剩余空间是否足够

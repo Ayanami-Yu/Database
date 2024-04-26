@@ -89,6 +89,5 @@ BraceWrapping:
     SplitEmptyNamespace: true
     IndentBraces:    false
 
-BinPackArguments: false
 BinPackParameters: false
 AllowAllParametersOfDeclarationOnNextLine: false    # 允许函数声明参数放在下一行

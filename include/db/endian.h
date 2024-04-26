@@ -74,8 +74,12 @@
 
 #    if BYTE_ORDER == LITTLE_ENDIAN
 
+         // Convert a 16-bit number in host byte order 
+         // to a 16-bit number in network byte order used in TCP/IP networks. 
 #        define htobe16(x) htons(x)
 #        define htole16(x) (x)
+         // Convert an IP port number in network byte order 
+         // to the IP port number in host byte order.
 #        define be16toh(x) ntohs(x)
 #        define le16toh(x) (x)
 

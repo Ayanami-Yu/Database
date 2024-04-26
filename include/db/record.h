@@ -18,7 +18,7 @@
 //   |   +-- 最小记录
 //   +-- tombstone
 //
-// 记录的分配按照4B对齐，同时要求block头部至少按照4B对齐
+// 记录的分配按照4B对齐，同时要求block头部至少按照4B对齐。
 //
 // @author niexw
 // @email niexiaowen@uestc.edu.cn
@@ -43,11 +43,13 @@ const unsigned char RECORD_FULL_MID = 0x02;   // 记录中间
 const unsigned char RECORD_FULL_END = 0x03;   // 记录结束
 
 struct iovec
-{
+{  
+    // iov_base -> the address of a buffer
+    // iov_len -> the length of the buffer
+    // 假设 o1（offset）指向 f1，则 f1 代表了一个记录
     // f1 -> iov_base -> buffer（内存）
-    // buffer 大小由 iov_len 给出
-    void *iov_base; /* Pointer to data.  */
-    size_t iov_len; /* Length of data.  */
+    void *iov_base; // Pointer to data
+    size_t iov_len; // Length of data
 };
 
 namespace db {

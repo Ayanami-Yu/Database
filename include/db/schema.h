@@ -8,6 +8,8 @@
 // 3. 域的个数；
 // 4. 各域的描述；（变长）
 // 5. 各种统计信息，表的大小，行数等；
+// 
+// 存储元数据方式：看成一个 Record，但该 Record 是变长的（因为不同表所存元数据总长不同）
 //
 // @author niexw
 // @email niexiaowen@uestc.edu.cn

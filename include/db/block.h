@@ -573,6 +573,8 @@ class DataBlock : public MetaBlock
     // 修改一条存在的记录
     // 先标定原记录为tomestone，然后插入新记录
     bool updateRecord(std::vector<struct iovec> &iov);
+    bool removeRecord(std::vector<struct iovec> &iov);
+
     // 分裂块位置
     // 给定新增的记录大小和位置，计算从何处开始分裂该block
     // 1. 先按照键排序

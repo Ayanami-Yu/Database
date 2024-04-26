@@ -14,7 +14,7 @@
 
 using namespace db;
 
-TEST_CASE("db/block.h")
+TEST_CASE("db/block.h", "[p1]")
 {
     SECTION("size")
     {

@@ -12,7 +12,7 @@
 #include <db/block.h>
 using namespace db;
 
-TEST_CASE("db/buffer.h")
+TEST_CASE("db/buffer.h", "[p1]")
 {
     SECTION("init")
     {

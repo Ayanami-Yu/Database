@@ -29,6 +29,8 @@ Buffer::~Buffer()
 
 void Buffer::init(FilePool *fp, size_t size)
 {
+    printf("size = %I64u", size);  // 256
+
     // 已经初始化过
     if (buffer_) return;
     filepool_ = fp;
