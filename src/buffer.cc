@@ -29,13 +29,13 @@ Buffer::~Buffer()
 
 void Buffer::init(FilePool *fp, size_t size)
 {
-    printf("size = %I64u", size);  // 256
-
     // 已经初始化过
     if (buffer_) return;
     filepool_ = fp;
 
     // 按照4096B对齐，以1MB为单位分配内存
+    // Requested memory allocation: size MB
+    // Alignment value: 4096
     unsigned char *buffer_ =
         (unsigned char *) _aligned_malloc(size * 1024 * 1024, 4096);
 

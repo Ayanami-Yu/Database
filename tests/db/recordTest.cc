@@ -18,7 +18,7 @@ TEST_CASE("db/record.h")
         const char *table = "table.db";
 
         int type = 1;
-        const char *hello = "hello, worl";
+        const char *hello = "hello, world";
         size_t length = strlen(hello) + 1;
 
         iov[0].iov_base = (void *) table;
@@ -31,7 +31,7 @@ TEST_CASE("db/record.h")
         iov[3].iov_len = sizeof(size_t);
 
         size_t ret = Record::size(iov);
-        REQUIRE(ret == 39);
+        REQUIRE(ret == 40);
 
         unsigned char buffer[80];
         Record record;
@@ -40,22 +40,22 @@ TEST_CASE("db/record.h")
         bool sret = record.set(iov, &header);
         REQUIRE(sret);
 
-        REQUIRE(record.length() == 39);
+        REQUIRE(record.length() == 40);
         REQUIRE(record.allocLength() == 40);
         REQUIRE(record.fields() == 4);
         REQUIRE(record.startOfoffsets() == 2);
         REQUIRE(record.startOfFields() == 6);
 
         REQUIRE(buffer[0] == header); // 头部
-        REQUIRE(buffer[1] == 39);     // 记录长度
+        REQUIRE(buffer[1] == 40);     // 记录长度
         REQUIRE(buffer[5] == 0);      // 第0个field偏移量
         REQUIRE(buffer[4] == 9);      // 第1个field偏移量
         REQUIRE(buffer[3] == 13);     // 第2个field偏移量
-        REQUIRE(buffer[2] == 25);     // 第3个field偏移量
+        REQUIRE(buffer[2] == 26);     // 第3个field偏移量
 
         REQUIRE(strlen(table) + 1 == 9 - 0);    // 第0个field的长度
         REQUIRE(sizeof(int) == 13 - 9);         // 第1个field的长度
-        REQUIRE(strlen(hello) + 1 == 25 - 13);  // 第2个field的长度
+        REQUIRE(strlen(hello) + 1 == 26 - 13);  // 第2个field的长度
         REQUIRE(sizeof(size_t) == 39 - 25 - 6); // 第3个field的长度
 
         // get
@@ -109,7 +109,7 @@ TEST_CASE("db/record.h")
         bret = record.getByIndex(b2, &l, 2);
         REQUIRE(bret);
         REQUIRE(strncmp(b2, hello, strlen(hello)) == 0);
-        REQUIRE(l == 12);
+        REQUIRE(l == 13);
         l = 8;
         bret = record.getByIndex((char *) &length2, &l, 3);
         REQUIRE(bret);
@@ -129,7 +129,7 @@ TEST_CASE("db/record.h")
         bret = record.refByIndex(&pb, &l, 2);
         REQUIRE(bret);
         REQUIRE(strncmp((const char *) pb, hello, strlen(hello)) == 0);
-        REQUIRE(l == 12);
+        REQUIRE(l == 13);
         bret = record.refByIndex(&pb, &l, 3);
         REQUIRE(bret);
         REQUIRE(memcmp(pb, &length, sizeof(length)) == 0);
