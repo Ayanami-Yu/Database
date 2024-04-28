@@ -671,6 +671,78 @@ TEST_CASE("db/block.h", "[p1]")
         kBuffer.releaseBuf(bd);
     }
 
+    SECTION("update")
+    {
+        Table table;
+        table.open("table");
+
+        BufDesp *bd = kBuffer.borrow("table", 0);
+        REQUIRE(bd);
+        // 将bd上buffer挂到super上
+        SuperBlock super;
+        super.attach(bd->buffer);
+        // 释放buffer
+        kBuffer.releaseBuf(bd);
+
+        // 加载第1个data
+        DataBlock data;
+        // 设定block的meta
+        data.setTable(&table);
+        // 关联数据
+        bd = kBuffer.borrow("table", 1);
+        data.attach(bd->buffer);
+
+        // 检查block，table表是空的，未添加任何表项
+        REQUIRE(data.checksum());
+        unsigned short size = data.getFreespaceSize();
+        REQUIRE(
+            BLOCK_SIZE - sizeof(DataHeader) - data.getTrailerSize() == size);
+
+        // 准备添加
+        DataType *type = findDataType("BIGINT");
+        std::vector<struct iovec> iov(2);
+        long long nid;
+        char name[20];
+
+        // 第1条记录
+        nid = 1;
+        type->htobe(&nid);
+        iov[0].iov_base = &nid;
+        iov[0].iov_len = 8;
+        iov[1].iov_base = name;
+        iov[1].iov_len = 20;        
+        unsigned short osize = data.getFreespaceSize();
+        unsigned short nsize = data.requireLength(iov);
+        // REQUIRE(nsize == ?);
+        printf("nsize = %hu", nsize);
+
+        std::pair<bool, unsigned short> ret = data.insertRecord(iov);
+        REQUIRE(ret.first);
+        REQUIRE(ret.second == 0);
+        REQUIRE(data.getFreespaceSize() == osize - nsize);
+        REQUIRE(data.getSlots() == 1);
+        Slot *slots = data.getSlotsPointer();
+        Record record;
+        record.attach(
+            data.buffer_ + be16toh(slots[0].offset), be16toh(slots[0].length));
+        REQUIRE(record.length() == Record::size(iov));
+        REQUIRE(record.fields() == 2);
+
+        long long xid;
+        unsigned int len;
+        record.getByIndex((char *) &xid, &len, 0);
+        REQUIRE(len == 8);
+        type->betoh(&xid);
+        REQUIRE(xid == 1);
+        unsigned char *pid;
+        xid = 0;
+        record.refByIndex(&pid, &len, 0);
+        REQUIRE(len == 8);
+        memcpy(&xid, pid, len);
+        type->betoh(&xid);
+        REQUIRE(xid == 1);
+    }
+
     SECTION("iterator")
     {
         Table table;

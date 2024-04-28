@@ -306,18 +306,6 @@ void MetaBlock::shrink()
     setFreeSize(BLOCK_SIZE - sizeof(MetaHeader) - getTrailerSize() - space);
 }
 
-unsigned short DataBlock::searchRecord(void *buf, size_t len)
-{
-    DataHeader *header = reinterpret_cast<DataHeader *>(buffer_);
-
-    // 获取key位置
-    RelationInfo *info = table_->info_;
-    unsigned int key = info->key;
-
-    // 调用数据类型的搜索
-    return info->fields[key].type->search(buffer_, key, buf, len);
-}
-
 std::pair<unsigned short, bool>
 DataBlock::splitPosition(size_t space, unsigned short index)
 {
@@ -360,6 +348,18 @@ unsigned short DataBlock::requireLength(std::vector<struct iovec> &iov)
             getSlots() * sizeof(Slot) +
             sizeof(unsigned int)); // trailer新增部分
     return (unsigned short) (length + trailer);
+}
+
+unsigned short DataBlock::searchRecord(void *buf, size_t len)
+{
+    DataHeader *header = reinterpret_cast<DataHeader *>(buffer_);
+
+    // 获取key位置
+    RelationInfo *info = table_->info_;
+    unsigned int key = info->key;
+
+    // 调用数据类型的搜索
+    return info->fields[key].type->search(buffer_, key, buf, len);
 }
 
 std::pair<bool, unsigned short>
@@ -409,12 +409,36 @@ DataBlock::insertRecord(std::vector<struct iovec> &iov)
     return std::pair<bool, unsigned short>(true, index);
 }
 
-bool updateRecord(std::vector<struct iovec>& iov)
+bool DataBlock::updateRecord(std::vector<struct iovec>& iov)
 {
+    RelationInfo *info = table_->info_;
+    unsigned int key = info->key;
+    DataType *type = info->fields[key].type;
+
+    // 确定位置
+    unsigned short index =
+        type->search(buffer_, key, iov[key].iov_base, iov[key].iov_len);
+
+    Record record;
+    if (index < getSlots()) {
+        Slot *slots = getSlotsPointer();
+        record.attach(
+            buffer_ + be16toh(slots[index].offset),
+            be16toh(slots[index].length));
+        unsigned char *pkey;
+        unsigned int len;
+        record.refByIndex(&pkey, &len, key);
+        if (memcmp(pkey, iov[key].iov_base, len) != 0)  // 记录不存在
+            return false;
+    }
+    record.die();
+
+
+
     return true;
 }
 
-bool removeRecord(std::vector<struct iovec>& iov) 
+bool DataBlock::removeRecord(std::vector<struct iovec>& iov) 
 { 
     return true; 
 }
