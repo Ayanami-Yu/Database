@@ -769,7 +769,8 @@ TEST_CASE("BlockTest", "[p1]")
             BLOCK_SIZE - sizeof(DataHeader) - data.getTrailerSize() == size);
 
         // 准备添加
-        DataType *type = findDataType("BIGINT");
+        DataType *bigint = findDataType("BIGINT");
+        DataType *char_type = findDataType("CHAR");
         std::vector<struct iovec> iov(3);
         long long nid;
         char phone[20];
@@ -777,7 +778,8 @@ TEST_CASE("BlockTest", "[p1]")
 
         // 第1条记录
         nid = 7;
-        type->htobe(&nid);
+        strcpy_s(phone, "11111111111");
+        bigint->htobe(&nid);
         iov[0].iov_base = &nid;
         iov[0].iov_len = 8;
         iov[1].iov_base = phone;
@@ -800,18 +802,66 @@ TEST_CASE("BlockTest", "[p1]")
         REQUIRE(record.length() == Record::size(iov));
         REQUIRE(record.fields() == 3);
 
+        // 测试 getByIndex
         long long xid;
         unsigned int len;
         record.getByIndex((char *) &xid, &len, 0);
         REQUIRE(len == 8);
-        type->betoh(&xid);
+        bigint->betoh(&xid);
         REQUIRE(xid == 7);
-        unsigned char *pid;
-        xid = 0;
+
+        char str[20];
+        record.getByIndex(str, &len, 1);
+        REQUIRE(len == 20);
+        char_type->betoh(str);
+        REQUIRE(strcmp(str, phone) == 0);
+        
+        // 测试 refByIndex
+        unsigned char *pid;        
+        xid = -1;
         record.refByIndex(&pid, &len, 0);
         REQUIRE(len == 8);
         memcpy(&xid, pid, len);
-        type->betoh(&xid);
+        bigint->betoh(&xid);
         REQUIRE(xid == 7);
+
+        // 更新第1条记录
+        nid = 7;
+        strcpy_s(phone, "222222222222");
+        bigint->htobe(&nid);
+        iov[0].iov_base = &nid;
+        iov[0].iov_len = 8;
+        iov[1].iov_base = phone;
+        iov[1].iov_len = 20;
+        iov[2].iov_base = (void *) addr;
+        iov[2].iov_len = 128;
+        osize = data.getFreespaceSize();
+        nsize = data.requireLength(iov);
+        REQUIRE(nsize == 168);
+        REQUIRE(data.updateRecord(iov));
+
+        REQUIRE(data.getFreespaceSize() == osize - nsize);
+        REQUIRE(data.getSlots() == 1);
+        slots = data.getSlotsPointer();
+        record.attach(
+            data.buffer_ + be16toh(slots[0].offset), be16toh(slots[0].length));
+        REQUIRE(record.length() == Record::size(iov));
+        REQUIRE(record.fields() == 3);
+
+        // 测试 getByIndex
+        record.getByIndex((char *) &xid, &len, 0);
+        REQUIRE(len == 8);
+        bigint->betoh(&xid);
+        REQUIRE(xid == 7);
+
+        record.getByIndex(str, &len, 1);
+        REQUIRE(len == 20);
+        char_type->betoh(str);
+        REQUIRE(strcmp(str, phone) == 0);
+        printf("str: %s", str);
+        printf("phone: %s", phone);
+
+        kBuffer.writeBuf(bd);
+        kBuffer.releaseBuf(bd);
     }
 }
