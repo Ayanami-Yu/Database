@@ -11,7 +11,7 @@
 #include <db/schema.h>
 using namespace db;
 
-TEST_CASE("db/file.h")
+TEST_CASE("db/file.h", "[p1]")
 {
     // 初始化全部变量
     dbInit();
