@@ -411,7 +411,10 @@ DataBlock::insertRecord(std::vector<struct iovec> &iov)
 
 bool DataBlock::updateRecord(std::vector<struct iovec>& iov)
 {
-    if (!removeRecord(iov)) return false;  // 记录不存在
+    if (!removeRecord(iov)) {  // 记录不存在
+        printf("failed to remove");
+        return false;
+    }
     
     std::pair<bool, unsigned short> pret = insertRecord(iov);   
     if (!pret.first && pret.second != -1) {  // Block 空间不足
@@ -449,6 +452,8 @@ bool DataBlock::updateRecord(std::vector<struct iovec>& iov)
         super.attach(bd->buffer);
         super.setRecords(super.getRecords() + 1);
         bd->relref();
+
+        printf("successfully split");
     }
 
     return true;
@@ -460,7 +465,7 @@ bool DataBlock::removeRecord(std::vector<struct iovec>& iov)
     unsigned int key = info->key;
     DataType *type = info->fields[key].type;
 
-    // 确定该记录对应的 slot 下表
+    // 确定该记录对应的 slot 下标
     unsigned short index =
         type->search(buffer_, key, iov[key].iov_base, iov[key].iov_len);
     if (index >= getSlots()) return false; // 记录不存在

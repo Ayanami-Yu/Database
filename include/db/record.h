@@ -44,12 +44,11 @@ const unsigned char RECORD_FULL_END = 0x03;   // 记录结束
 
 struct iovec
 {  
-    // iov_base -> the address of a buffer
-    // iov_len -> the length of the buffer
+    // iov_base: the address of a buffer
+    // iov_len: the length of the buffer
     // 假设 o1（offset）指向 f1，则 f1 代表了一个记录
-    // f1 -> iov_base -> buffer（内存）
-    void *iov_base; // Pointer to data
-    size_t iov_len; // Length of data
+    void *iov_base;
+    size_t iov_len;
 };
 
 namespace db {

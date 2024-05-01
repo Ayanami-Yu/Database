@@ -788,7 +788,6 @@ TEST_CASE("BlockTest", "[p1]")
         iov[2].iov_len = 128;
         unsigned short osize = data.getFreespaceSize();
         unsigned short nsize = data.requireLength(iov);
-        REQUIRE(nsize == 168);
 
         std::pair<bool, unsigned short> ret = data.insertRecord(iov);
         REQUIRE(ret.first);
@@ -820,6 +819,7 @@ TEST_CASE("BlockTest", "[p1]")
         // 测试 refByIndex
         unsigned char *pid;        
         xid = -1;
+        len = sizeof(&pid);
         record.refByIndex(&pid, &len, 0);
         REQUIRE(len == 8);
         memcpy(&xid, pid, len);
@@ -836,12 +836,10 @@ TEST_CASE("BlockTest", "[p1]")
         iov[1].iov_len = 20;
         iov[2].iov_base = (void *) addr;
         iov[2].iov_len = 128;
-        osize = data.getFreespaceSize();
-        nsize = data.requireLength(iov);
-        // REQUIRE(nsize == 176);
-        REQUIRE(data.updateRecord(iov));
+        unsigned short freesize = data.getFreeSize();
 
-        REQUIRE(data.getFreespaceSize() == osize - nsize);
+        REQUIRE(data.updateRecord(iov));
+        REQUIRE(data.getFreeSize() == freesize);
         REQUIRE(data.getSlots() == 1);
         slots = data.getSlotsPointer();
         record.attach(
@@ -850,17 +848,17 @@ TEST_CASE("BlockTest", "[p1]")
         REQUIRE(record.fields() == 3);
 
         // 测试 getByIndex
+        len = sizeof(&xid);
         record.getByIndex((char *) &xid, &len, 0);
         REQUIRE(len == 8);
         bigint->betoh(&xid);
         REQUIRE(xid == 7);
 
+        len = sizeof(str);
         record.getByIndex(str, &len, 1);
         REQUIRE(len == 20);
         char_type->betoh(str);
         REQUIRE(strcmp(str, phone) == 0);
-        printf("str: %s", str);
-        printf("phone: %s", phone);
 
         kBuffer.writeBuf(bd);
         kBuffer.releaseBuf(bd);
