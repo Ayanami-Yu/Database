@@ -411,30 +411,45 @@ DataBlock::insertRecord(std::vector<struct iovec> &iov)
 
 bool DataBlock::updateRecord(std::vector<struct iovec>& iov)
 {
-    RelationInfo *info = table_->info_;
-    unsigned int key = info->key;
-    DataType *type = info->fields[key].type;
-
-    // 确定位置
-    unsigned short index =
-        type->search(buffer_, key, iov[key].iov_base, iov[key].iov_len);   
-    if (index >= getSlots()) return false;  // 记录不存在
-
-    Record record;
-    Slot *slots = getSlotsPointer();
-    record.attach(
-        buffer_ + be16toh(slots[index].offset),
-        be16toh(slots[index].length));
-    unsigned char *pkey;
-    unsigned int len;
-    record.refByIndex(&pkey, &len, key);
-    if (memcmp(pkey, iov[key].iov_base, len) != 0)  // key 应相等
-        return false;
+    if (!removeRecord(iov)) return false;  // 记录不存在
     
-    if (!removeRecord(iov)) {
+    std::pair<bool, unsigned short> pret = insertRecord(iov);   
+    if (!pret.first && pret.second != -1) {  // Block 空间不足
+        // 分裂 block
+        unsigned short insert_position = pret.second;
+        std::pair<unsigned short, bool> split_position =
+            splitPosition(Record::size(iov), insert_position);
 
+        // 先分配一个 block
+        DataBlock next;
+        next.setTable(table_);
+        unsigned int blkid = table_->allocate();
+        BufDesp *bd = kBuffer.borrow(table_->name_.c_str(), blkid);
+        next.attach(bd->buffer);
+
+        // 移动记录到新的 block 上
+        while (getSlots() > split_position.first) {
+            Record record;
+            refslots(split_position.first, record);
+            next.copyRecord(record);
+            deallocate(split_position.first);
+        }
+        // 插入新记录
+        if (split_position.second) insertRecord(iov);
+        else next.insertRecord(iov);
+
+        // 维护数据链
+        next.setNext(getNext());
+        setNext(next.getSelf());
+        bd->relref();
+
+        // 维护超块头部中的记录数目
+        SuperBlock super;
+        bd = kBuffer.borrow(table_->name_.c_str(), 0);
+        super.attach(bd->buffer);
+        super.setRecords(super.getRecords() + 1);
+        bd->relref();
     }
-
 
     return true;
 }
