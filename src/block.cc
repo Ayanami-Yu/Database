@@ -417,22 +417,23 @@ bool DataBlock::updateRecord(std::vector<struct iovec>& iov)
 
     // 确定位置
     unsigned short index =
-        type->search(buffer_, key, iov[key].iov_base, iov[key].iov_len);
+        type->search(buffer_, key, iov[key].iov_base, iov[key].iov_len);   
+    if (index >= getSlots()) return false;  // 记录不存在
 
     Record record;
-    if (index < getSlots()) {
-        Slot *slots = getSlotsPointer();
-        record.attach(
-            buffer_ + be16toh(slots[index].offset),
-            be16toh(slots[index].length));
-        unsigned char *pkey;
-        unsigned int len;
-        record.refByIndex(&pkey, &len, key);
-        if (memcmp(pkey, iov[key].iov_base, len) != 0)  // 记录不存在
-            return false;
-    }
-    record.die();
+    Slot *slots = getSlotsPointer();
+    record.attach(
+        buffer_ + be16toh(slots[index].offset),
+        be16toh(slots[index].length));
+    unsigned char *pkey;
+    unsigned int len;
+    record.refByIndex(&pkey, &len, key);
+    if (memcmp(pkey, iov[key].iov_base, len) != 0)  // key 应相等
+        return false;
+    
+    if (!removeRecord(iov)) {
 
+    }
 
 
     return true;
@@ -440,6 +441,19 @@ bool DataBlock::updateRecord(std::vector<struct iovec>& iov)
 
 bool DataBlock::removeRecord(std::vector<struct iovec>& iov) 
 { 
+    RelationInfo *info = table_->info_;
+    unsigned int key = info->key;
+    DataType *type = info->fields[key].type;
+
+    // 确定该记录对应的 slot 下表
+    unsigned short index =
+        type->search(buffer_, key, iov[key].iov_base, iov[key].iov_len);
+    if (index >= getSlots()) return false; // 记录不存在
+
+    // 设置记录的 tombstone，挤压 slots
+    // 修改 slots 数目，freesize 加回删除的 slot
+    deallocate(index);
+    
     return true; 
 }
 

@@ -90,6 +90,7 @@ class Record
     bool get(std::vector<struct iovec> &iov, unsigned char *header);
     // 从buffer拷贝某个字段
     // 实际上不进行拷贝，而是将 iov_base 指向 buffer
+    // len：buffer 长度
     bool getByIndex(char *buffer, unsigned int *len, unsigned int index);
     // 从buffer引用各字段
     bool ref(std::vector<struct iovec> &iov, unsigned char *header);
