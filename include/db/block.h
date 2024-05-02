@@ -12,6 +12,7 @@
 // slots 是按照键排序的；
 // trailer 放 checksum；
 // free space 受上下两侧挤压；
+// freesize = sizeof(freespace) + sum(sizeof(标记了 tombstone 的 record))；
 // 删除记录：将 Header 中的 tombstone bit 置为1，因为不一定立即回收该空间。比如，当 free space 满时再去回收。
 // 此时需要扫描 block 上的所有记录，接着对记录间的空间压缩。
 // 

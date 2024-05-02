@@ -738,6 +738,25 @@ TEST_CASE("db/block.h")
     }
 }
 
+void initBlocks(SuperBlock super, DataBlock data)
+{
+
+}
+
+void setIov(
+    std::vector<struct iovec>& iov,
+    long long *nid,
+    char *phone,
+    void *addr)
+{
+    iov[0].iov_base = nid;
+    iov[0].iov_len = 8;
+    iov[1].iov_base = phone;
+    iov[1].iov_len = 20;
+    iov[2].iov_base = addr;
+    iov[2].iov_len = 128;
+}
+
 TEST_CASE("BlockTest", "[p1]")
 {
     SECTION("update")
@@ -751,7 +770,6 @@ TEST_CASE("BlockTest", "[p1]")
         // 将bd上buffer挂到super上
         SuperBlock super;
         super.attach(bd->buffer);
-        // 释放buffer
         kBuffer.releaseBuf(bd);
 
         // 加载第1个data
@@ -777,15 +795,10 @@ TEST_CASE("BlockTest", "[p1]")
         char addr[128];
 
         // 第1条记录
-        nid = 7;
+        nid = 1;
         strcpy_s(phone, "11111111111");
         bigint->htobe(&nid);
-        iov[0].iov_base = &nid;
-        iov[0].iov_len = 8;
-        iov[1].iov_base = phone;
-        iov[1].iov_len = 20;
-        iov[2].iov_base = (void *) addr;
-        iov[2].iov_len = 128;
+        setIov(iov, &nid, phone, (void *) addr);        
         unsigned short osize = data.getFreespaceSize();
         unsigned short nsize = data.requireLength(iov);
 
@@ -807,7 +820,7 @@ TEST_CASE("BlockTest", "[p1]")
         record.getByIndex((char *) &xid, &len, 0);
         REQUIRE(len == 8);
         bigint->betoh(&xid);
-        REQUIRE(xid == 7);
+        REQUIRE(xid == 1);
 
         char str[22];
         len = sizeof(str);
@@ -824,18 +837,13 @@ TEST_CASE("BlockTest", "[p1]")
         REQUIRE(len == 8);
         memcpy(&xid, pid, len);
         bigint->betoh(&xid);
-        REQUIRE(xid == 7);
+        REQUIRE(xid == 1);
 
         // 更新第1条记录
-        nid = 7;
+        nid = 1;
         strcpy_s(phone, "222222222222");
         bigint->htobe(&nid);
-        iov[0].iov_base = &nid;
-        iov[0].iov_len = 8;
-        iov[1].iov_base = phone;
-        iov[1].iov_len = 20;
-        iov[2].iov_base = (void *) addr;
-        iov[2].iov_len = 128;
+        setIov(iov, &nid, phone, (void *) addr);
         unsigned short freesize = data.getFreeSize();
 
         REQUIRE(data.updateRecord(iov));
@@ -852,7 +860,7 @@ TEST_CASE("BlockTest", "[p1]")
         record.getByIndex((char *) &xid, &len, 0);
         REQUIRE(len == 8);
         bigint->betoh(&xid);
-        REQUIRE(xid == 7);
+        REQUIRE(xid == 1);
 
         len = sizeof(str);
         record.getByIndex(str, &len, 1);
@@ -860,7 +868,29 @@ TEST_CASE("BlockTest", "[p1]")
         char_type->betoh(str);
         REQUIRE(strcmp(str, phone) == 0);
 
+        // 插入直到即将分裂       
+        while (ret.first) {
+            bigint->betoh(&nid);
+            nid += 1;
+            bigint->htobe(&nid);
+            setIov(iov, &nid, phone, (void *) addr);            
+            ret = data.insertRecord(iov);
+        }
+        bigint->betoh(&nid);
+        REQUIRE(nid == 96); // 共能插入96条记录
+       
+        // 分裂后才能插入该记录
+        nid += 1;
+        bigint->htobe(&nid);
+        setIov(iov, &nid, phone, (void *) addr);
+        REQUIRE(!data.updateRecord(iov));
+
+        unsigned int blockid = data.getNext();
         kBuffer.writeBuf(bd);
+        kBuffer.releaseBuf(bd);
+
+        bd = kBuffer.borrow("table", blockid);
+        REQUIRE(bd);
         kBuffer.releaseBuf(bd);
     }
 }

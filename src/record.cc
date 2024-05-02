@@ -27,7 +27,7 @@ size_t Record::size(std::vector<struct iovec> &iov)
 
     // 再加上总长度
     it.set(total);
-    total += it.size() + 1;
+    total += it.size() + HEADER_SIZE;
 
     return total;
 }

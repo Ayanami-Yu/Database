@@ -388,16 +388,11 @@ DataBlock::insertRecord(std::vector<struct iovec> &iov)
     }
 
     // 如果block空间足够，插入
-    size_t blen = getFreeSize(); // 该block的富余空间
-    unsigned short actlen = (unsigned short) Record::size(iov);
-    unsigned short alignlen = ALIGN_TO_SIZE(actlen);
-    unsigned short trailerlen =
-        ALIGN_TO_SIZE((getSlots() + 1) * sizeof(Slot) + sizeof(unsigned int)) -
-        ALIGN_TO_SIZE(getSlots() * sizeof(Slot) + sizeof(unsigned int));
-    if (blen < actlen + trailerlen)
+    if (getFreeSize() < requireLength(iov))
         return std::pair<bool, unsigned short>(false, index);
 
     // 分配空间
+    unsigned short actlen = (unsigned short) Record::size(iov);
     std::pair<unsigned char *, bool> alloc_ret = allocate(actlen, index);
     // 填写记录
     record.attach(alloc_ret.first, actlen);
@@ -411,10 +406,8 @@ DataBlock::insertRecord(std::vector<struct iovec> &iov)
 
 bool DataBlock::updateRecord(std::vector<struct iovec>& iov)
 {
-    if (!removeRecord(iov)) {  // 记录不存在
-        printf("failed to remove");
+    if (!removeRecord(iov))  // 记录不存在        
         return false;
-    }
     
     std::pair<bool, unsigned short> pret = insertRecord(iov);   
     if (!pret.first && pret.second != -1) {  // Block 空间不足
@@ -453,7 +446,7 @@ bool DataBlock::updateRecord(std::vector<struct iovec>& iov)
         super.setRecords(super.getRecords() + 1);
         bd->relref();
 
-        printf("successfully split");
+        printf("successfully split\n");
     }
 
     return true;
