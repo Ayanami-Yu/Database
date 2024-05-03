@@ -940,3 +940,46 @@ TEST_CASE("BlockTest", "[p1]")
         kBuffer.releaseBuf(bd);
     }
 }
+
+inline void setIdxIov(
+    long long* key,
+    unsigned int* blockid,
+    std::vector<struct iovec>& iov)
+{
+    iov[0].iov_base = key;
+    iov[0].iov_len = sizeof(long long);
+    iov[1].iov_base = blockid;
+    iov[1].iov_len = sizeof(unsigned int);
+}
+
+TEST_CASE("IndexTest", "[p2]") 
+{
+    SECTION("search")
+    {
+        Table table;
+        REQUIRE(table.open("table") == S_OK);
+
+        DataBlock data;
+        data.setTable(&table);
+        BufDesp *bd = kBuffer.borrow("table", 1);
+        REQUIRE(bd);
+        data.attach(bd->buffer);
+
+        DataType *bigint = findDataType("BIGINT");
+        std::vector<struct iovec> iov(2);
+        long long key;
+        unsigned int blockid;
+
+        key = 10;
+        blockid = 1;
+        setIdxIov(&key, &blockid, iov);
+
+        // unsigned int fs = data.getFreeSize();
+        // unsigned short rl = data.requireLength(iov);
+        // printf("freesize = %u\n", fs);
+        // printf("required len = %hu\n", rl);
+        // max: 1021
+        
+        kBuffer.releaseBuf(bd);
+    }
+}

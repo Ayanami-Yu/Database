@@ -9,7 +9,7 @@
 #include <db/schema.h>
 using namespace db;
 
-TEST_CASE("db/schema.h", "[p1]")
+TEST_CASE("db/schema.h", "[p1][p2]")
 {
     SECTION("relationinfo")
     {
