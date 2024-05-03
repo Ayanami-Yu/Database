@@ -738,11 +738,6 @@ TEST_CASE("db/block.h")
     }
 }
 
-void initBlocks(SuperBlock super, DataBlock data)
-{
-
-}
-
 void setIov(
     std::vector<struct iovec>& iov,
     long long *nid,
@@ -879,11 +874,12 @@ TEST_CASE("BlockTest", "[p1]")
         bigint->betoh(&nid);
         REQUIRE(nid == 96); // 共能插入96条记录
        
-        // 分裂后才能插入该记录
-        nid += 1;
+        // 使更新后的记录更长
         bigint->htobe(&nid);
-        setIov(iov, &nid, phone, (void *) addr);
-        REQUIRE(!data.updateRecord(iov));
+        char var_addr[256];
+        setIov(iov, &nid, phone, (void *) var_addr);
+        iov[2].iov_len = 256;
+        REQUIRE(data.updateRecord(iov));
 
         unsigned int blockid = data.getNext();
         kBuffer.writeBuf(bd);
