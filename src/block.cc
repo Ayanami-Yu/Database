@@ -448,8 +448,6 @@ bool DataBlock::updateRecord(std::vector<struct iovec>& iov)
         super.attach(bd->buffer);
         super.setRecords(super.getRecords() + 1);
         bd->relref();
-
-        printf("split\n");
     }
 
     return true;
@@ -466,8 +464,8 @@ bool DataBlock::removeRecord(std::vector<struct iovec>& iov)
         type->search(buffer_, key, iov[key].iov_base, iov[key].iov_len);
     if (index >= getSlots()) return false; // 记录不存在
 
-    // 设置记录的tombstone，挤压slots
-    // 修改slots数目，freesize加回删除的slot
+    // 设置记录的 tombstone，挤压 slots
+    // 修改 slots 数目，freesize 加回删除的 slot
     deallocate(index);
     
     return true; 
