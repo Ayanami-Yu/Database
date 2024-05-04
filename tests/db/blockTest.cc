@@ -965,15 +965,45 @@ inline void setIdxIov(
     iov[1].iov_len = sizeof(unsigned int);
 }
 
+void createBlock(
+    Table *table,
+    unsigned int blockid,
+    unsigned int next,
+    unsigned short type,
+    std::vector<std::vector<struct iovec>> &iovs)
+{
+    unsigned int selfid = table->allocate();
+    REQUIRE(selfid == blockid);
+
+    DataBlock data;
+    data.setTable(table);
+    BufDesp *bd = kBuffer.borrow("table", blockid);
+    REQUIRE(bd);
+    data.attach(bd->buffer);
+    data.setType(type);
+    data.setNext(next);
+
+    for (int i = 0; i < iovs.size(); i++) {
+        // REQUIRE(data.insertRecord(iovs[i]).first);
+        auto ret = data.insertRecord(iovs[i]);
+        printf("second = %hu\n", ret.second);
+        REQUIRE(ret.first);
+    }
+
+    kBuffer.releaseBuf(bd);
+}
+
 TEST_CASE("IndexTest", "[p2]") 
 {
     SECTION("search")
     {
         Table table;
         REQUIRE(table.open("table") == S_OK);
+        table.deallocate(1);
 
         DataType *bigint = findDataType("BIGINT");
-        std::vector<struct iovec> iov(2);
+        std::vector<std::vector<struct iovec>> iovs;
+        std::vector<struct iovec> iov1(2);
         long long key;
         unsigned int blockid;
 
@@ -984,17 +1014,91 @@ TEST_CASE("IndexTest", "[p2]")
         super.setRoot(1);
         kBuffer.releaseBuf(bd);
 
-        DataBlock data;
-        data.setTable(&table);
-        bd = kBuffer.borrow("table", 1);
-        REQUIRE(bd);
-        data.attach(bd->buffer);
-
-        data.setType(BLOCK_TYPE_INDEX); // 设为内节点
-        data.setNext(2);
+        // 第1个节点（根）
         setIdxIov(bigint, 13, &key, 3, &blockid, iov);
-        REQUIRE(data.insertRecord(iov).first);
-        
-        kBuffer.releaseBuf(bd);
+        iovs.emplace_back(iov);
+        createBlock(&table, 1, 2, BLOCK_TYPE_INDEX, iovs);
+        iovs.clear();
+
+        // 第2个节点
+        setIdxIov(bigint, 7, &key, 5, &blockid, iov);
+        iovs.emplace_back(iov);
+        createBlock(&table, 2, 4, BLOCK_TYPE_INDEX, iovs);
+        iovs.clear();
+
+        // 第3个
+        setIdxIov(bigint, 23, &key, 7, &blockid, iov);
+        iovs.emplace_back(iov);
+        void *k1 = iov[0].iov_base;
+        printf("1 before = %lld\n", *((long long *) k1));
+        bigint->betoh(k1);
+        printf("1 after = %lld\n", *((long long *) k1));
+
+        setIdxIov(bigint, 31, &key, 8, &blockid, iov);
+        iovs.emplace_back(iov);
+        setIdxIov(bigint, 43, &key, 9, &blockid, iov);
+        iovs.emplace_back(iov);
+        for (int i = 0; i < iovs.size(); ++i) {
+            void *k2 = iovs[i][0].iov_base;
+            bigint->betoh(k2);
+            printf("iovs[%d] = %lld\n", i, *((long long *) k2));
+        }
+
+        createBlock(&table, 3, 6, BLOCK_TYPE_INDEX, iovs);
+        iovs.clear();
+
+        // 第4个
+        /* setIdxIov(bigint, 2, &key, -1, &blockid, iov);
+        iovs.emplace_back(iov);
+        setIdxIov(bigint, 3, &key, -1, &blockid, iov);
+        iovs.emplace_back(iov);
+        setIdxIov(bigint, 5, &key, -1, &blockid, iov);
+        iovs.emplace_back(iov);
+        createBlock(&table, 4, 5, BLOCK_TYPE_DATA, iovs);
+        iovs.clear();
+
+        // 第5个
+        setIdxIov(bigint, 7, &key, -1, &blockid, iov);
+        iovs.emplace_back(iov);
+        setIdxIov(bigint, 11, &key, -1, &blockid, iov);
+        iovs.emplace_back(iov);
+        createBlock(&table, 5, 6, BLOCK_TYPE_DATA, iovs);
+        iovs.clear();
+
+        // 第6个
+        setIdxIov(bigint, 13, &key, -1, &blockid, iov);
+        iovs.emplace_back(iov);
+        setIdxIov(bigint, 17, &key, -1, &blockid, iov);
+        iovs.emplace_back(iov);
+        setIdxIov(bigint, 19, &key, -1, &blockid, iov);
+        iovs.emplace_back(iov);
+        createBlock(&table, 6, 7, BLOCK_TYPE_DATA, iovs);
+        iovs.clear();
+
+        // 第7个
+        setIdxIov(bigint, 23, &key, -1, &blockid, iov);
+        iovs.emplace_back(iov);
+        setIdxIov(bigint, 29, &key, -1, &blockid, iov);
+        iovs.emplace_back(iov);
+        createBlock(&table, 7, 8, BLOCK_TYPE_DATA, iovs);
+        iovs.clear();
+
+        // 第8个
+        setIdxIov(bigint, 31, &key, -1, &blockid, iov);
+        iovs.emplace_back(iov);
+        setIdxIov(bigint, 37, &key, -1, &blockid, iov);
+        iovs.emplace_back(iov);
+        setIdxIov(bigint, 41, &key, -1, &blockid, iov);
+        iovs.emplace_back(iov);
+        createBlock(&table, 8, 9, BLOCK_TYPE_DATA, iovs);
+        iovs.clear();
+
+        // 第9个
+        setIdxIov(bigint, 43, &key, -1, &blockid, iov);
+        iovs.emplace_back(iov);
+        setIdxIov(bigint, 47, &key, -1, &blockid, iov);
+        iovs.emplace_back(iov);
+        createBlock(&table, 9, NULL, BLOCK_TYPE_DATA, iovs);
+        iovs.clear();*/
     }
 }
