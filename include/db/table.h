@@ -65,6 +65,7 @@ class Table
     int open(const char *name);
 
     // 采用枚举的方式定位一个key在哪个block
+    // 返回值：blockid
     unsigned int locate(void *keybuf, unsigned int len);
     // 定位一个block后，插入一条记录
     int insert(unsigned int blkid, std::vector<struct iovec> &iov);

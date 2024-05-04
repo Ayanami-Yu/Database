@@ -57,6 +57,7 @@
 #include "./record.h"
 #include "./schema.h"
 #include "./datatype.h"
+#include <stack>
 
 namespace db {
 
@@ -69,6 +70,7 @@ const unsigned short BLOCK_TYPE_LOG = 5;   // wal日志
 
 const unsigned int SUPER_SIZE = 1024 * 4;  // 超块大小为4KB
 const unsigned int BLOCK_SIZE = 1024 * 16; // 一般块大小为16KB
+const unsigned short DATA_FREESIZE = 16344;  // DataBlock的初始freesize
 
 #if BYTE_ORDER == LITTLE_ENDIAN
 static const int MAGIC_NUMBER = 0x31306264; // magic number
@@ -103,15 +105,16 @@ struct Trailer
 // 超块头部
 struct SuperHeader : CommonHeader
 {
-    unsigned int first;      // 第1个数据块(4B)
     long long stamp;         // 时戳(8B)
+    long long records;       // 记录数目(8B)
+    unsigned int first;      // 第1个数据块(4B)
     unsigned int idle;       // 空闲块(4B)
     unsigned int datacounts; // 数据块个数
     unsigned int idlecounts; // 空闲块个数
     unsigned int self;       // 本块id(4B)
     unsigned int maxid;      // 最大的blockid(4B)
     unsigned int pad;        // 填充位(4B)
-    long long records;       // 记录数目(8B)
+    unsigned int root;       // 根节点blockid
 };
 
 // 空闲块头部
@@ -345,6 +348,18 @@ class SuperBlock : public Block
         SuperHeader *header = reinterpret_cast<SuperHeader *>(buffer_);
         return be64toh(header->records);
     }
+
+    inline unsigned int getRoot()
+    {
+        SuperHeader *header = reinterpret_cast<SuperHeader *>(buffer_);
+        return be32toh(header->root);
+    }
+
+    inline void setRoot(unsigned int root)
+    {
+        SuperHeader *header = reinterpret_cast<SuperHeader *>(buffer_);
+        header->root = htobe32(root);
+    }
 };
 
 ////
@@ -553,6 +568,7 @@ class DataBlock : public MetaBlock
     inline Table *getTable() { return table_; }
 
     // 查询记录
+    // 需要先将key转换为网络字节序
     // 给定一个关键字，从slots[]上搜索到该记录：
     // 1. 根据meta确定key的位置；
     // 2. 采用二分查找在slots[]上寻找
@@ -575,6 +591,15 @@ class DataBlock : public MetaBlock
     // 先标定原记录为tomestone，然后插入新记录
     bool updateRecord(std::vector<struct iovec> &iov);
     bool removeRecord(std::vector<struct iovec> &iov);
+
+    inline bool isUnderflow() { return getFreeSize() < DATA_FREESIZE / 2; }
+
+    // len 为 keybuf 指向的 buffer 的长度
+    // 需先将 keybuf 转换为网络字节序
+    int search(void *keybuf, unsigned int len, std::vector<struct iovec> &iov);
+    int remove(void *keybuf);
+    int insert(std::vector<struct iovec> &iov);   
+    int update(std::vector<struct iovec> &iov);    
 
     // 分裂块位置
     // 给定新增的记录大小和位置，计算从何处开始分裂该block

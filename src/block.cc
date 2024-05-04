@@ -471,6 +471,81 @@ bool DataBlock::removeRecord(std::vector<struct iovec>& iov)
     return true; 
 }
 
+int DataBlock::search(
+    void *keybuf,
+    unsigned int len,
+    std::vector<struct iovec> &iov)
+{
+    SuperBlock super;
+    BufDesp *bd = kBuffer.borrow(table_->name_.c_str(), 0);
+    super.attach(bd->buffer);
+
+    unsigned char header; // 存记录头部
+    std::stack<unsigned int> stk; // 存 blockid
+    stk.push(super.getRoot());
+    kBuffer.releaseBuf(bd); // 释放超块
+
+    while (!stk.empty()) {
+        unsigned int blockid = stk.top();
+        stk.pop();
+
+        DataBlock data;
+        bd = kBuffer.borrow(table_->name_.c_str(), super.getRoot());
+        data.attach(bd->buffer);
+        Slot *slots = data.getSlotsPointer();
+
+        unsigned short ret = data.searchRecord(keybuf, len);
+        if (data.getType() == BLOCK_TYPE_DATA) { // 叶节点
+            if (ret >= data.getSlots()) { // 记录不存在
+                kBuffer.releaseBuf(bd);
+                return EFAULT;
+            }
+            
+            Record record;
+            record.attach(
+                data.buffer_ + be16toh(slots[ret].offset),
+                be16toh(slots[ret].length));
+            record.get(iov, &header);
+
+            // ret == 0 时仍可能记录不存在
+            if (memcmp(keybuf, iov[0].iov_base, iov[0].iov_len) != 0) {
+                kBuffer.releaseBuf(bd);
+                return EFAULT;
+            } else {
+                kBuffer.releaseBuf(bd);
+                return S_OK;
+            }
+        } else { // BLOCK_TYPE_INDEX
+            if (ret >= data.getSlots()) { 
+                Record record;
+                record.attach(
+                    data.buffer_ + be16toh(slots[data.getSlots() - 1].offset),
+                    be16toh(slots[data.getSlots() - 1].length));
+                record.get(iov, &header);
+                stk.push(*((unsigned int *) iov[1].iov_base));
+            }
+        }
+    }
+
+
+    return S_OK;
+}
+
+int DataBlock::remove(void *keybuf) 
+{
+    return S_OK;
+}
+
+int DataBlock::insert(std::vector<struct iovec> &iov) 
+{
+    return S_OK;
+}
+
+int DataBlock::update(std::vector<struct iovec> &iov) 
+{
+    return S_OK;
+}
+
 bool DataBlock::copyRecord(Record &record)
 {
     // 判断剩余空间是否足够

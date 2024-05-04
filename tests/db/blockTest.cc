@@ -974,11 +974,7 @@ TEST_CASE("IndexTest", "[p2]")
         blockid = 1;
         setIdxIov(&key, &blockid, iov);
 
-        // unsigned int fs = data.getFreeSize();
-        // unsigned short rl = data.requireLength(iov);
-        // printf("freesize = %u\n", fs);
-        // printf("required len = %hu\n", rl);
-        // max: 1021
+        printf("fs = %hu", data.getFreeSize());
         
         kBuffer.releaseBuf(bd);
     }

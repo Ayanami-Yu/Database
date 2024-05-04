@@ -86,6 +86,7 @@ class Record
     // 向buffer里写各个域，返回按照对齐后的长度
     bool set(std::vector<struct iovec> &iov, const unsigned char *header);
     // 从buffer拷贝各字段
+    // 同时将该记录的头部拷贝到header中
     bool get(std::vector<struct iovec> &iov, unsigned char *header);
     // 从buffer拷贝某个字段
     // 实际上不进行拷贝，而是将 iov_base 指向 buffer

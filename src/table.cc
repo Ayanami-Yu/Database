@@ -218,7 +218,7 @@ unsigned int Table::locate(void *keybuf, unsigned int len)
         // 要排除相等的情况
         bret = type->less((unsigned char *) keybuf, len, pkey, klen);
         if (bret)
-            return prev->getSelf(); //
+            return prev->getSelf();
         else
             return bi->getSelf(); // 相等
     }
