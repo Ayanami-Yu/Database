@@ -480,7 +480,6 @@ int DataBlock::search(
     BufDesp *bd = kBuffer.borrow(table_->name_.c_str(), 0);
     super.attach(bd->buffer);
 
-    unsigned char header; // 存记录头部
     std::stack<unsigned int> stk; // 存 blockid
     stk.push(super.getRoot());
     kBuffer.releaseBuf(bd); // 释放超块
@@ -499,13 +498,8 @@ int DataBlock::search(
             if (ret >= data.getSlots()) { // 记录不存在
                 kBuffer.releaseBuf(bd);
                 return EFAULT;
-            }
-            
-            Record record;
-            record.attach(
-                data.buffer_ + be16toh(slots[ret].offset),
-                be16toh(slots[ret].length));
-            record.get(iov, &header);
+            }   
+            getRecord(data.buffer_, slots, ret, iov);
 
             // ret == 0 时仍可能记录不存在
             if (memcmp(keybuf, iov[0].iov_base, iov[0].iov_len) != 0) {
@@ -517,18 +511,24 @@ int DataBlock::search(
             }
         } else { // BLOCK_TYPE_INDEX
             if (ret >= data.getSlots()) { 
-                Record record;
-                record.attach(
-                    data.buffer_ + be16toh(slots[data.getSlots() - 1].offset),
-                    be16toh(slots[data.getSlots() - 1].length));
-                record.get(iov, &header);
+                getRecord(data.buffer_, slots, data.getSlots() - 1, iov);
                 stk.push(*((unsigned int *) iov[1].iov_base));
+            } else {
+                getRecord(data.buffer_, slots, ret, iov);
+
+                // 若相等则为键的右侧指针，否则为左侧
+                if (memcmp(keybuf, iov[0].iov_base, iov[0].iov_len) == 0) {
+                    stk.push(*((unsigned int *) iov[1].iov_base));
+                } else if (ret > 0) {
+                    getRecord(data.buffer_, slots, ret - 1, iov);
+                    stk.push(*((unsigned int *) iov[1].iov_base));
+                } else {
+                    stk.push(data.getNext()); // 最左侧指针
+                }
             }
         }
     }
-
-
-    return S_OK;
+    return EFAULT;
 }
 
 int DataBlock::remove(void *keybuf) 

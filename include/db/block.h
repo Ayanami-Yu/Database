@@ -618,6 +618,20 @@ class DataBlock : public MetaBlock
     RecordIterator endrecord();
 };
 
+// 将 slots[idx] 处的记录赋给 iov
+inline void getRecord(
+    unsigned char *buffer,
+    Slot *slots,
+    unsigned short idx,
+    std::vector<struct iovec> &iov)
+{
+    Record record;
+    unsigned char header;
+    record.attach(
+        buffer + be16toh(slots[idx].offset), be16toh(slots[idx].length));
+    record.get(iov, &header);
+}
+
 inline bool operator==(
     const DataBlock::RecordIterator &x,
     const DataBlock::RecordIterator &y)

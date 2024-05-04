@@ -741,7 +741,7 @@ TEST_CASE("db/block.h")
     }
 }
 
-inline void htobe_iov(
+inline void htobeIov(
     DataType *bigint, DataType *char_type, DataType *varchar,
     long long* nid, char* phone, char* addr)
 {
@@ -803,7 +803,7 @@ TEST_CASE("BlockTest", "[p1]")
         // 第1条记录
         nid = 1;
         strcpy_s(phone, "11111111111");
-        htobe_iov(bigint, char_type, varchar, &nid, phone, addr);
+        htobeIov(bigint, char_type, varchar, &nid, phone, addr);
         setIov(iov, &nid, phone, (void *) addr);        
         unsigned short osize = data.getFreespaceSize();
         unsigned short nsize = data.requireLength(iov);
@@ -848,7 +848,7 @@ TEST_CASE("BlockTest", "[p1]")
         // 更新第1条记录
         nid = 1;
         strcpy_s(phone, "222222222222");
-        htobe_iov(bigint, char_type, varchar, &nid, phone, addr);
+        htobeIov(bigint, char_type, varchar, &nid, phone, addr);
         setIov(iov, &nid, phone, (void *) addr);
         unsigned short freesize = data.getFreeSize();
 
@@ -874,19 +874,24 @@ TEST_CASE("BlockTest", "[p1]")
         char_type->betoh(str);
         REQUIRE(strcmp(str, phone) == 0);
 
-        // 插入直到即将分裂       
+        // 插入直到即将分裂
+        // BufDesp *bd2 = kBuffer.borrow("table", 0);
+        // super.attach(bd2->buffer);      
         while (ret.first) {
             bigint->betoh(&nid);
             nid += 1;
             bigint->htobe(&nid);
             setIov(iov, &nid, phone, (void *) addr);            
             ret = data.insertRecord(iov);
+            // printf("records = %lld\n", super.getRecords());            
         }
+        // kBuffer.releaseBuf(bd2);
+
         bigint->betoh(&nid);
         REQUIRE(nid == 178); // 共能插入 177 条记录
 
         // 测试记录不存在时 update
-        htobe_iov(bigint, char_type, varchar, &nid, phone, addr);
+        htobeIov(bigint, char_type, varchar, &nid, phone, addr);
         setIov(iov, &nid, phone, (void *) addr);
         REQUIRE(!data.updateRecord(iov));
        
@@ -894,7 +899,7 @@ TEST_CASE("BlockTest", "[p1]")
         addr = LONG_ADDR;
         bigint->betoh(&nid);
         nid -= 1;
-        htobe_iov(bigint, char_type, varchar, &nid, phone, addr);
+        htobeIov(bigint, char_type, varchar, &nid, phone, addr);
         setIov(iov, &nid, phone, (void *) addr);
         REQUIRE(!data.getNext());  // 检查此时没有新 block
         REQUIRE(data.updateRecord(iov));
@@ -928,7 +933,7 @@ TEST_CASE("BlockTest", "[p1]")
 
         // 测试记录不存在
         nid = 1;
-        htobe_iov(bigint, nullptr, nullptr, &nid, phone, addr);
+        htobeIov(bigint, nullptr, nullptr, &nid, phone, addr);
         setIov(iov, &nid, phone, (void *) addr);
         data.clear(1, 1, BLOCK_TYPE_DATA);
         REQUIRE(!data.removeRecord(iov));
@@ -941,14 +946,22 @@ TEST_CASE("BlockTest", "[p1]")
     }
 }
 
+// 在函数内先调用 htobe
 inline void setIdxIov(
-    long long* key,
-    unsigned int* blockid,
+    DataType *bigint,
+    long long key,
+    long long* keybuf,
+    unsigned int id,
+    unsigned int* idbuf,
     std::vector<struct iovec>& iov)
 {
-    iov[0].iov_base = key;
+    *keybuf = key;
+    *idbuf = id;
+    bigint->htobe(keybuf);
+    bigint->htobe(idbuf);
+    iov[0].iov_base = keybuf;
     iov[0].iov_len = sizeof(long long);
-    iov[1].iov_base = blockid;
+    iov[1].iov_base = idbuf;
     iov[1].iov_len = sizeof(unsigned int);
 }
 
@@ -959,22 +972,28 @@ TEST_CASE("IndexTest", "[p2]")
         Table table;
         REQUIRE(table.open("table") == S_OK);
 
-        DataBlock data;
-        data.setTable(&table);
-        BufDesp *bd = kBuffer.borrow("table", 1);
-        REQUIRE(bd);
-        data.attach(bd->buffer);
-
         DataType *bigint = findDataType("BIGINT");
         std::vector<struct iovec> iov(2);
         long long key;
         unsigned int blockid;
 
-        key = 10;
-        blockid = 1;
-        setIdxIov(&key, &blockid, iov);
+        SuperBlock super;
+        BufDesp *bd = kBuffer.borrow("table", 0);
+        REQUIRE(bd);
+        super.attach(bd->buffer);
+        super.setRoot(1);
+        kBuffer.releaseBuf(bd);
 
-        printf("fs = %hu", data.getFreeSize());
+        DataBlock data;
+        data.setTable(&table);
+        bd = kBuffer.borrow("table", 1);
+        REQUIRE(bd);
+        data.attach(bd->buffer);
+
+        data.setType(BLOCK_TYPE_INDEX); // 设为内节点
+        data.setNext(2);
+        setIdxIov(bigint, 13, &key, 3, &blockid, iov);
+        REQUIRE(data.insertRecord(iov).first);
         
         kBuffer.releaseBuf(bd);
     }

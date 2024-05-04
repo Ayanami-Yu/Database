@@ -42,6 +42,7 @@ void dump(Table &table)
     }
     printf("total records=%zd\n", table.recordCount());
 }
+
 bool check(Table &table)
 {
     int rcount = 0;
