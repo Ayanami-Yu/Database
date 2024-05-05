@@ -596,6 +596,7 @@ class DataBlock : public MetaBlock
 
     // len 为 keybuf 指向的 buffer 的长度
     // 需先将 keybuf 转换为网络字节序
+    // iov 获取到的值是以网络字节序存储的
     int search(void *keybuf, unsigned int len, std::vector<struct iovec> &iov);
     int remove(void *keybuf);
     int insert(std::vector<struct iovec> &iov);   

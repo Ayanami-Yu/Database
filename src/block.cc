@@ -484,13 +484,15 @@ int DataBlock::search(
     stk.push(super.getRoot());
     kBuffer.releaseBuf(bd); // 释放超块
 
+    DataType *bigint = findDataType("BIGINT");
     while (!stk.empty()) {
         unsigned int blockid = stk.top();
         stk.pop();
 
         DataBlock data;
-        bd = kBuffer.borrow(table_->name_.c_str(), super.getRoot());
+        bd = kBuffer.borrow(table_->name_.c_str(), blockid);
         data.attach(bd->buffer);
+        data.setTable(table_);
         Slot *slots = data.getSlotsPointer();
 
         unsigned short ret = data.searchRecord(keybuf, len);
@@ -512,16 +514,22 @@ int DataBlock::search(
         } else { // BLOCK_TYPE_INDEX
             if (ret >= data.getSlots()) { 
                 getRecord(data.buffer_, slots, data.getSlots() - 1, iov);
-                stk.push(*((unsigned int *) iov[1].iov_base));
+                bigint->betoh(iov[1].iov_base);
+                stk.push(*(unsigned int *) iov[1].iov_base);
             } else {
                 getRecord(data.buffer_, slots, ret, iov);
 
                 // 若相等则为键的右侧指针，否则为左侧
                 if (memcmp(keybuf, iov[0].iov_base, iov[0].iov_len) == 0) {
-                    stk.push(*((unsigned int *) iov[1].iov_base));
+                    unsigned int tmp = *(unsigned int *) iov[1].iov_base;
+                    bigint->betoh(iov[1].iov_base);
+                    tmp = *(unsigned int *) iov[1].iov_base;
+
+                    stk.push(*(unsigned int *) iov[1].iov_base);
                 } else if (ret > 0) {
                     getRecord(data.buffer_, slots, ret - 1, iov);
-                    stk.push(*((unsigned int *) iov[1].iov_base));
+                    bigint->betoh(iov[1].iov_base);
+                    stk.push(*(unsigned int *) iov[1].iov_base);
                 } else {
                     stk.push(data.getNext()); // 最左侧指针
                 }
