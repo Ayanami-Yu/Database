@@ -958,18 +958,12 @@ inline void setIdxIov(
 {
     *keybuf = key;
     *idbuf = id;
-    //printf("setIdxIov id = %u\n", id);
-    //printf("setIdxIov idbuf = %u\n", *idbuf);
     bigint->htobe(keybuf);
     int_type->htobe(idbuf);
     iov[0].iov_base = keybuf;
     iov[0].iov_len = sizeof(long long);
     iov[1].iov_base = idbuf;
     iov[1].iov_len = sizeof(unsigned int);
-
-    //int_type->betoh(iov[1].iov_base);
-    //printf("setIdxIov blockid = %u\n", *(unsigned int *) iov[1].iov_base);
-    //int_type->htobe(iov[1].iov_base);
 }
 
 bool createBlock(
@@ -993,20 +987,7 @@ bool createBlock(
     for (int i = 0; i < iovs.size(); i++) {
         auto ret = data.insertRecord(iovs[i]);
         if (!ret.first) return false;
-
-        /* DataType *bigint = findDataType("BIGINT");
-        DataType *int_type = findDataType("INT");
-        bigint->betoh(iovs[i][0].iov_base);
-        int_type->betoh(iovs[i][1].iov_base);
-        printf(
-            "selfid = %u key = %lld blockid = %u\n",
-            blockid,
-            *(long long *) iovs[i][0].iov_base,
-            *(unsigned int *) iovs[i][1].iov_base);
-        bigint->htobe(iovs[i][0].iov_base);
-        int_type->htobe(iovs[i][1].iov_base); */
     }
-
     kBuffer.releaseBuf(bd);
     return true;
 }
@@ -1056,55 +1037,56 @@ TEST_CASE("IndexTest", "[p2]")
         iovs.clear();
 
         // 第4个
-        setIdxIov(bigint, int_type, 2, &keys[5], -1, &blockids[5], iov);
+        // 第4到9均为叶节点
+        setIdxIov(bigint, int_type, 2, &keys[5], 20, &blockids[5], iov);
         iovs.push_back(iov);
-        setIdxIov(bigint, int_type, 3, &keys[6], -1, &blockids[6], iov);
+        setIdxIov(bigint, int_type, 3, &keys[6], 30, &blockids[6], iov);
         iovs.push_back(iov);
-        setIdxIov(bigint, int_type, 5, &keys[7], -1, &blockids[7], iov);
+        setIdxIov(bigint, int_type, 5, &keys[7], 50, &blockids[7], iov);
         iovs.push_back(iov);
         REQUIRE(createBlock(&table, 4, 5, BLOCK_TYPE_DATA, iovs));
         iovs.clear();
 
         // 第5个
-        setIdxIov(bigint, int_type, 7, &keys[8], -1, &blockids[8], iov);
+        setIdxIov(bigint, int_type, 7, &keys[8], 70, &blockids[8], iov);
         iovs.push_back(iov);
-        setIdxIov(bigint, int_type, 11, &keys[9], -1, &blockids[9], iov);
+        setIdxIov(bigint, int_type, 11, &keys[9], 110, &blockids[9], iov);
         iovs.push_back(iov);
         REQUIRE(createBlock(&table, 5, 6, BLOCK_TYPE_DATA, iovs));
         iovs.clear();
 
         // 第6个
-        setIdxIov(bigint, int_type, 13, &keys[10], -1, &blockids[10], iov);
+        setIdxIov(bigint, int_type, 13, &keys[10], 130, &blockids[10], iov);
         iovs.push_back(iov);
-        setIdxIov(bigint, int_type, 17, &keys[11], -1, &blockids[11], iov);
+        setIdxIov(bigint, int_type, 17, &keys[11], 170, &blockids[11], iov);
         iovs.push_back(iov);
-        setIdxIov(bigint, int_type, 19, &keys[12], -1, &blockids[12], iov);
+        setIdxIov(bigint, int_type, 19, &keys[12], 190, &blockids[12], iov);
         iovs.push_back(iov);
         REQUIRE(createBlock(&table, 6, 7, BLOCK_TYPE_DATA, iovs));
         iovs.clear();
 
         // 第7个
-        setIdxIov(bigint, int_type, 23, &keys[13], -1, &blockids[13], iov);
+        setIdxIov(bigint, int_type, 23, &keys[13], 230, &blockids[13], iov);
         iovs.push_back(iov);
-        setIdxIov(bigint, int_type, 29, &keys[14], -1, &blockids[14], iov);
+        setIdxIov(bigint, int_type, 29, &keys[14], 290, &blockids[14], iov);
         iovs.push_back(iov);
         REQUIRE(createBlock(&table, 7, 8, BLOCK_TYPE_DATA, iovs));
         iovs.clear();
 
         // 第8个
-        setIdxIov(bigint, int_type, 31, &keys[15], -1, &blockids[15], iov);
+        setIdxIov(bigint, int_type, 31, &keys[15], 310, &blockids[15], iov);
         iovs.push_back(iov);
-        setIdxIov(bigint, int_type, 37, &keys[16], -1, &blockids[16], iov);
+        setIdxIov(bigint, int_type, 37, &keys[16], 370, &blockids[16], iov);
         iovs.push_back(iov);
-        setIdxIov(bigint, int_type, 41, &keys[17], -1, &blockids[17], iov);
+        setIdxIov(bigint, int_type, 41, &keys[17], 410, &blockids[17], iov);
         iovs.push_back(iov);
         REQUIRE(createBlock(&table, 8, 9, BLOCK_TYPE_DATA, iovs));
         iovs.clear();
 
         // 第9个
-        setIdxIov(bigint, int_type, 43, &keys[18], -1, &blockids[18], iov);
+        setIdxIov(bigint, int_type, 43, &keys[18], 430, &blockids[18], iov);
         iovs.push_back(iov);
-        setIdxIov(bigint, int_type, 47, &keys[19], -1, &blockids[19], iov);
+        setIdxIov(bigint, int_type, 47, &keys[19], 470, &blockids[19], iov);
         iovs.push_back(iov);
         REQUIRE(createBlock(&table, 9, NULL, BLOCK_TYPE_DATA, iovs));
         iovs.clear();
@@ -1114,13 +1096,60 @@ TEST_CASE("IndexTest", "[p2]")
         bd = kBuffer.borrow("table", 1);
         data.attach(bd->buffer);
 
-        bigint->betoh(&keys[0]);
-        REQUIRE(keys[0] == 13);
-        bigint->htobe(&keys[0]);
-        REQUIRE(data.search(&keys[0], sizeof(long long), iov) == S_OK);
+        // 检查13
+        // 当根节点有所查键
+        long long key = 13;
+        bigint->htobe(&key);
+        REQUIRE(data.search(&key, sizeof(long long), iov) == S_OK);
         bigint->betoh(iov[0].iov_base);
-        REQUIRE(*(long long *) iov[0].iov_base == 13);
+        int_type->betoh(iov[1].iov_base);
+        REQUIRE(*(long long *) iov[0].iov_base == 13); // 检查记录的键
+        REQUIRE(*(unsigned int *) iov[1].iov_base == 130); // 检查记录的值
 
+        // 检查43
+        // 当内节点有所查键
+        key = 43;
+        bigint->htobe(&key);
+        REQUIRE(data.search(&key, sizeof(long long), iov) == S_OK);
+        bigint->betoh(iov[0].iov_base);
+        int_type->betoh(iov[1].iov_base);
+        REQUIRE(*(long long *) iov[0].iov_base == 43);
+        REQUIRE(*(unsigned int *) iov[1].iov_base == 430);
+
+        // 检查37
+        // 当内节点无所查键
+        key = 37;
+        bigint->htobe(&key);
+        REQUIRE(data.search(&key, sizeof(long long), iov) == S_OK);
+        bigint->betoh(iov[0].iov_base);
+        int_type->betoh(iov[1].iov_base);
+        REQUIRE(*(long long *) iov[0].iov_base == 37);
+        REQUIRE(*(unsigned int *) iov[1].iov_base == 370);
+
+        // 检查2
+        // 最小的键
+        key = 2;
+        bigint->htobe(&key);
+        REQUIRE(data.search(&key, sizeof(long long), iov) == S_OK);
+        bigint->betoh(iov[0].iov_base);
+        int_type->betoh(iov[1].iov_base);
+        REQUIRE(*(long long *) iov[0].iov_base == 2);
+        REQUIRE(*(unsigned int *) iov[1].iov_base == 20);
+
+        // 检查47
+        // 最大的键
+        key = 47;
+        bigint->htobe(&key);
+        REQUIRE(data.search(&key, sizeof(long long), iov) == S_OK);
+        bigint->betoh(iov[0].iov_base);
+        int_type->betoh(iov[1].iov_base);
+        REQUIRE(*(long long *) iov[0].iov_base == 47);
+        REQUIRE(*(unsigned int *) iov[1].iov_base == 470);
+
+        // 检查键不存在
+        key = 12;
+        bigint->htobe(&key);
+        REQUIRE(data.search(&key, sizeof(long long), iov) == EFAULT);
 
         kBuffer.releaseBuf(bd);
     }
