@@ -874,18 +874,14 @@ TEST_CASE("BlockTest", "[p1]")
         char_type->betoh(str);
         REQUIRE(strcmp(str, phone) == 0);
 
-        // 插入直到即将分裂
-        // BufDesp *bd2 = kBuffer.borrow("table", 0);
-        // super.attach(bd2->buffer);      
+        // 插入直到即将分裂     
         while (ret.first) {
             bigint->betoh(&nid);
             nid += 1;
             bigint->htobe(&nid);
             setIov(iov, &nid, phone, (void *) addr);            
-            ret = data.insertRecord(iov);
-            // printf("records = %lld\n", super.getRecords());            
+            ret = data.insertRecord(iov);            
         }
-        // kBuffer.releaseBuf(bd2);
 
         bigint->betoh(&nid);
         REQUIRE(nid == 178); // 共能插入 177 条记录
@@ -1152,5 +1148,10 @@ TEST_CASE("IndexTest", "[p2]")
         REQUIRE(data.search(&key, sizeof(long long), iov) == EFAULT);
 
         kBuffer.releaseBuf(bd);
+    }
+
+    SECTION("remove")
+    {
+
     }
 }

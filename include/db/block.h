@@ -590,15 +590,30 @@ class DataBlock : public MetaBlock
     // 修改一条存在的记录
     // 先标定原记录为tomestone，然后插入新记录
     bool updateRecord(std::vector<struct iovec> &iov);
+    // 记录不存在时返回false
     bool removeRecord(std::vector<struct iovec> &iov);
 
+    // 先分裂 block
+    // 再按键排列后将较大的记录分配到新 block
+    // 返回新分配的 blockid 和接下来记录应插到的位置
+    // true 表示接下来应插到旧 block
+    std::pair<unsigned int, bool> 
+        split(unsigned short insertPos, std::vector<struct iovec> &iov);
     inline bool isUnderflow() { return getFreeSize() < DATA_FREESIZE / 2; }
+
+    // 获取指向self的指针
+    inline unsigned int* getSelfBuf()
+    {
+        DataHeader *header = reinterpret_cast<DataHeader *>(buffer_);
+        return &(header->self);
+    }
 
     // len 为 keybuf 指向的 buffer 的长度
     // 需先将 keybuf 转换为网络字节序
     // iov 获取到的值是以网络字节序存储的
     int search(void *keybuf, unsigned int len, std::vector<struct iovec> &iov);
-    int remove(void *keybuf);
+    // iov[0] 应给出所要删除的键及其长度
+    int remove(std::vector<struct iovec> &iov);
     int insert(std::vector<struct iovec> &iov);   
     int update(std::vector<struct iovec> &iov);    
 

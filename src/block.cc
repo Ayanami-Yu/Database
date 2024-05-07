@@ -404,6 +404,35 @@ DataBlock::insertRecord(std::vector<struct iovec> &iov)
     return std::pair<bool, unsigned short>(true, index);
 }
 
+std::pair<unsigned int, bool> DataBlock::split(
+    unsigned short insertPos,
+    std::vector<struct iovec> &iov)
+{
+    // 分裂 block
+    std::pair<unsigned short, bool> splitPos =
+        splitPosition(Record::size(iov), insertPos);
+
+    // 先分配一个 block
+    DataBlock next;
+    next.setTable(table_);
+    unsigned int blkid = table_->allocate();
+    BufDesp *bd = kBuffer.borrow(table_->name_.c_str(), blkid);
+    next.attach(bd->buffer);
+
+    // 移动记录到新的 block 上
+    while (getSlots() > splitPos.first) {
+        Record record;
+        refslots(splitPos.first, record);
+        next.copyRecord(record);
+        deallocate(splitPos.first);
+    }
+    kBuffer.releaseBuf(bd);
+
+    // 返回应插在旧还是新 block
+    bool included = splitPos.second ? true : false;
+    return std::make_pair(blkid, included);
+}
+
 bool DataBlock::updateRecord(std::vector<struct iovec>& iov)
 {
     if (!removeRecord(iov))  // 记录不存在        
@@ -413,28 +442,14 @@ bool DataBlock::updateRecord(std::vector<struct iovec>& iov)
 
     // 保留分裂逻辑，
     // 因为可能有变长记录导致删完再插空间仍不足
-    if (!pret.first && pret.second != -1) {  // Block 空间不足
-        // 分裂 block
-        unsigned short insert_position = pret.second;
-        std::pair<unsigned short, bool> split_position =
-            splitPosition(Record::size(iov), insert_position);
-
-        // 先分配一个 block
+    if (!pret.first && pret.second != -1) {  // Block 空间不足       
+        std::pair<unsigned int, bool> splitRet = split(pret.second, iov);
         DataBlock next;
-        next.setTable(table_);
-        unsigned int blkid = table_->allocate();
-        BufDesp *bd = kBuffer.borrow(table_->name_.c_str(), blkid);
+        BufDesp *bd = kBuffer.borrow(table_->name_.c_str(), splitRet.first);
         next.attach(bd->buffer);
+        next.setTable(table_);
 
-        // 移动记录到新的 block 上
-        while (getSlots() > split_position.first) {
-            Record record;
-            refslots(split_position.first, record);
-            next.copyRecord(record);
-            deallocate(split_position.first);
-        }
-        // 插入新记录
-        if (split_position.second) insertRecord(iov);
+        if (splitRet.second) insertRecord(iov);
         else next.insertRecord(iov);
 
         // 维护数据链
@@ -449,7 +464,6 @@ bool DataBlock::updateRecord(std::vector<struct iovec>& iov)
         super.setRecords(super.getRecords() + 1);
         bd->relref();
     }
-
     return true;
 }
 
@@ -536,14 +550,154 @@ int DataBlock::search(
     return EFAULT;
 }
 
-int DataBlock::remove(void *keybuf) 
+int DataBlock::remove(std::vector<struct iovec> &iov)
 {
-    return S_OK;
+    SuperBlock super;
+    BufDesp *bd = kBuffer.borrow(table_->name_.c_str(), 0);
+    super.attach(bd->buffer);
+
+    std::stack<unsigned int> stk; // 存 blockid
+    stk.push(super.getRoot());
+    kBuffer.releaseBuf(bd); // 释放超块
+
+    DataType *int_type = findDataType("INT");
+    std::vector<struct iovec> tmp(2);
+    while (!stk.empty()) {
+        unsigned int blockid = stk.top();
+        stk.pop();
+
+        DataBlock data;
+        bd = kBuffer.borrow(table_->name_.c_str(), blockid);
+        data.attach(bd->buffer);
+        data.setTable(table_);
+        Slot *slots = data.getSlotsPointer();
+
+        unsigned short ret = data.searchRecord(iov[0].iov_base, iov[0].iov_len);
+        if (data.getType() == BLOCK_TYPE_DATA) { // 叶节点
+            if (ret >= data.getSlots()) {        // 记录不存在
+                kBuffer.releaseBuf(bd);
+                return EFAULT;
+            }
+            getRecord(data.buffer_, slots, ret, tmp);
+
+            // ret == 0 时仍可能记录不存在
+            if (memcmp(iov[0].iov_base, tmp[0].iov_base, iov[0].iov_len) != 0) {
+                kBuffer.releaseBuf(bd);
+                return EFAULT;
+            } else { // 找到待删除记录
+                data.removeRecord(iov);
+                if (data.isUnderflow()) {
+
+                }
+
+                kBuffer.releaseBuf(bd);
+                return S_OK;
+            }
+        } else { // BLOCK_TYPE_INDEX
+            if (ret >= data.getSlots()) {
+                getRecord(data.buffer_, slots, data.getSlots() - 1, tmp);
+                int_type->betoh(tmp[1].iov_base);
+                stk.push(*(unsigned int *) tmp[1].iov_base);
+            } else {
+                getRecord(data.buffer_, slots, ret, tmp);
+
+                // 若相等则为键的右侧指针，否则为左侧
+                if (memcmp(iov[0].iov_base, tmp[0].iov_base, iov[0].iov_len) ==
+                    0) {
+                    int_type->betoh(tmp[1].iov_base);
+                    stk.push(*(unsigned int *) tmp[1].iov_base);
+                } else if (ret > 0) {
+                    getRecord(data.buffer_, slots, ret - 1, tmp);
+                    int_type->betoh(tmp[1].iov_base);
+                    stk.push(*(unsigned int *) tmp[1].iov_base);
+                } else {
+                    stk.push(data.getNext()); // 最左侧指针
+                }
+            }
+        }
+    }
+    return EFAULT;
 }
 
 int DataBlock::insert(std::vector<struct iovec> &iov) 
 {
-    return S_OK;
+    SuperBlock super;
+    BufDesp *bd = kBuffer.borrow(table_->name_.c_str(), 0);
+    super.attach(bd->buffer);
+
+    std::stack<unsigned int> stk; // 存 blockid
+    stk.push(super.getRoot());
+    kBuffer.releaseBuf(bd); // 释放超块
+
+    DataType *int_type = findDataType("INT");
+    std::vector<struct iovec> tmp(2);
+    while (!stk.empty()) {
+        unsigned int blockid = stk.top();
+        //stk.pop();
+
+        DataBlock data;
+        bd = kBuffer.borrow(table_->name_.c_str(), blockid);
+        data.attach(bd->buffer);
+        data.setTable(table_);
+        Slot *slots = data.getSlotsPointer();
+
+        unsigned short ret = data.searchRecord(iov[0].iov_base, iov[0].iov_len);
+        if (data.getType() == BLOCK_TYPE_DATA) { // 叶节点
+            stk.pop(); // 准备向上回溯
+            if (ret > 0 && ret < data.getSlots()) { // 记录已存在
+                kBuffer.releaseBuf(bd);
+                return EFAULT;
+            }
+            getRecord(data.buffer_, slots, ret, tmp);
+
+            // ret == 0 时记录仍可能已存在
+            if (memcmp(iov[0].iov_base, tmp[0].iov_base, iov[0].iov_len) == 0) {
+                kBuffer.releaseBuf(bd);
+                return EFAULT;
+            }
+            std::pair<bool, unsigned int> pret = data.insertRecord(iov);
+            if (!pret.first && pret.second != -1) { // Block 空间不足
+                std::pair<unsigned int, bool> splitRet =
+                    data.split(pret.second, iov);
+
+                DataBlock next;
+                BufDesp *bd2 =
+                    kBuffer.borrow(table_->name_.c_str(), splitRet.first);
+                next.attach(bd2->buffer);
+                next.setTable(table_);
+
+                if (splitRet.second) data.insertRecord(iov);
+                else next.insertRecord(iov);
+
+                std::vector<struct iovec> rec = {
+                    { iov[0].iov_base, iov[0].iov_len },
+                    { next.getSelfBuf(), sizeof(unsigned int)} };
+                while (!stk.empty()) { // 开始回溯
+                    blockid = stk.top();
+                    stk.pop();
+
+                    DataBlock parent;
+                    BufDesp *bd3 =
+                        kBuffer.borrow(table_->name_.c_str(), blockid);
+                    parent.attach(bd3->buffer);
+                    parent.setTable(table_);
+
+                    auto pret2 = parent.insertRecord(rec);
+
+
+                    kBuffer.releaseBuf(bd3);
+                }
+
+                kBuffer.releaseBuf(bd2);
+                kBuffer.releaseBuf(bd);
+                return S_OK;
+            }
+
+        } else { // BLOCK_TYPE_INDEX
+            
+        }
+    }
+    return EFAULT;
 }
 
 int DataBlock::update(std::vector<struct iovec> &iov) 
