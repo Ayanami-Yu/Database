@@ -629,21 +629,22 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
     stk.push(super.getRoot());
     kBuffer.releaseBuf(bd); // 释放超块
 
-    DataType *int_type = findDataType("INT");
-    std::vector<struct iovec> tmp(2);
+    std::vector<struct iovec> tmp(2); // 用于检验记录是否已存在
+
+    bool needToSplit = false; // 用于当前节点判断是否需分裂后再次插入
+    std::vector<struct iovec> rec;
     while (!stk.empty()) {
         unsigned int blockid = stk.top();
-        //stk.pop();
 
         DataBlock data;
         bd = kBuffer.borrow(table_->name_.c_str(), blockid);
         data.attach(bd->buffer);
-        data.setTable(table_);
+        data.setTable(table_); // 复用 data 时无需再 setTable
         Slot *slots = data.getSlotsPointer();
 
-        unsigned short ret = data.searchRecord(iov[0].iov_base, iov[0].iov_len);
-        if (data.getType() == BLOCK_TYPE_DATA) { // 叶节点
-            stk.pop(); // 准备向上回溯
+        unsigned short ret = data.searchRecord(iov[0].iov_base, iov[0].iov_len);        
+        if (data.getType() == BLOCK_TYPE_DATA) { // 叶节点            
+            stk.pop(); // 准备向上回溯   
             if (ret > 0 && ret < data.getSlots()) { // 记录已存在
                 kBuffer.releaseBuf(bd);
                 return EFAULT;
@@ -664,35 +665,105 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
                 BufDesp *bd2 =
                     kBuffer.borrow(table_->name_.c_str(), splitRet.first);
                 next.attach(bd2->buffer);
-                next.setTable(table_);
+                next.setTable(table_); // 复用 next 无需再 set
 
                 if (splitRet.second) data.insertRecord(iov);
                 else next.insertRecord(iov);
 
-                std::vector<struct iovec> rec = {
-                    { iov[0].iov_base, iov[0].iov_len },
-                    { next.getSelfBuf(), sizeof(unsigned int)} };
+                std::pair<void *, size_t> recordBuf = next.getRecordBuf(0); // 获取新 block 的最小键
+                rec = {
+                    {recordBuf.first, recordBuf.second},
+                    {next.getSelfBuf(), sizeof(unsigned int)}}; // 都为网络字节序
+
+                kBuffer.releaseBuf(bd2);
+                kBuffer.releaseBuf(bd);
+
+                blockid = stk.top();
+                DataBlock parent;
+                BufDesp *bd3 = kBuffer.borrow(table_->name_.c_str(), blockid);
+                parent.attach(bd3->buffer);
+                parent.setTable(table_); // 复用 parent 无需再 set
+
+                std::pair<bool, unsigned int> pret2 = parent.insertRecord(rec);
+                if (!pret2.first && pret2.second != -1) { // 父节点需要分裂
+                    needToSplit = true;
+                }
+                kBuffer.releaseBuf(bd3);
+
                 while (!stk.empty()) { // 开始回溯
                     blockid = stk.top();
                     stk.pop();
 
-                    DataBlock parent;
-                    BufDesp *bd3 =
-                        kBuffer.borrow(table_->name_.c_str(), blockid);
-                    parent.attach(bd3->buffer);
-                    parent.setTable(table_);
+                    if (needToSplit) {
+                        needToSplit = false;
+                        BufDesp *bd3 =
+                            kBuffer.borrow(table_->name_.c_str(), blockid);
+                        data.attach(bd3->buffer);
+                        splitRet = data.split(pret2.second, rec);
 
-                    auto pret2 = parent.insertRecord(rec);
+                        bd2 = kBuffer.borrow(
+                            table_->name_.c_str(), splitRet.first);
+                        next.attach(bd2->buffer);
 
+                        if (splitRet.second) data.insertRecord(rec);
+                        else next.insertRecord(rec);
 
-                    kBuffer.releaseBuf(bd3);
+                        recordBuf = next.getRecordBuf(0);
+                        rec.clear();
+                        rec = {
+                            {recordBuf.first, recordBuf.second},
+                            {next.getSelfBuf(), sizeof(unsigned int)}};
+                        kBuffer.releaseBuf(bd2);
+
+                        // 尝试给父节点插入中位键
+                        blockid = stk.top();
+                        bd2 = kBuffer.borrow(table_->name_.c_str(), blockid);
+                        parent.attach(bd2->buffer);
+                        pret2 = parent.insertRecord(rec);
+                        if (!pret2.first && pret2.second != -1)
+                            needToSplit = true;
+
+                        kBuffer.releaseBuf(bd3);
+                    }
                 }
+                if (needToSplit) { // 根节点需要分裂再插入
+                    bd = kBuffer.borrow(table_->name_.c_str(), 0); // 获取超块
+                    super.attach(bd->buffer);
+                    blockid = super.getRoot();
+                    bd2 = kBuffer.borrow(table_->name_.c_str(), blockid); // 获取根
+                    data.attach(bd2->buffer);
 
-                kBuffer.releaseBuf(bd2);
-                kBuffer.releaseBuf(bd);
+                    splitRet = data.split(pret2.second, rec);
+                    bd3 = kBuffer.borrow(table_->name_.c_str(), splitRet.first); // 获取新 block
+                    next.attach(bd3->buffer);
+
+                    if (splitRet.second) data.insertRecord(rec);
+                    else next.insertRecord(rec);
+
+                    recordBuf = next.getRecordBuf(0);
+                    rec.clear();
+                    rec = {
+                        {recordBuf.first, recordBuf.second},
+                        {next.getSelfBuf(), sizeof(unsigned int)}};
+
+                    unsigned int rootId = table_->allocate(); // 申请新 block 作为根
+                    DataBlock root;
+                    root.setTable(table_);
+                    BufDesp *bd4 =
+                        kBuffer.borrow(table_->name_.c_str(), rootId);
+                    root.attach(bd4->buffer);
+                    super.setRoot(rootId); // 维护超块中的根 blockid
+
+                    root.insertRecord(rec);
+                    root.setNext(data.getSelf());
+                   
+                    kBuffer.releaseBuf(bd4);
+                    kBuffer.releaseBuf(bd3);
+                    kBuffer.releaseBuf(bd2);
+                    kBuffer.releaseBuf(bd);
+                }
                 return S_OK;
             }
-
         } else { // BLOCK_TYPE_INDEX
             
         }

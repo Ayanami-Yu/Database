@@ -601,11 +601,18 @@ class DataBlock : public MetaBlock
         split(unsigned short insertPos, std::vector<struct iovec> &iov);
     inline bool isUnderflow() { return getFreeSize() < DATA_FREESIZE / 2; }
 
-    // 获取指向self的指针
+    // 获取指向 self 的指针
     inline unsigned int* getSelfBuf()
     {
         DataHeader *header = reinterpret_cast<DataHeader *>(buffer_);
         return &(header->self);
+    }
+
+    inline std::pair<void *, size_t> getRecordBuf(int idx)
+    {
+        Slot *slots = getSlotsPointer();
+        return std::make_pair(
+            buffer_ + be16toh(slots[idx].offset), be16toh(slots[idx].length));
     }
 
     // len 为 keybuf 指向的 buffer 的长度
