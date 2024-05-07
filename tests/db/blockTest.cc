@@ -988,32 +988,6 @@ bool createBlock(
     return true;
 }
 
-void clearBlock(Table *table, unsigned int blockid)
-{
-    DataBlock data;
-    data.setTable(table);
-    BufDesp *bd = kBuffer.borrow("table", blockid);
-    data.attach(bd->buffer);
-    Slot *slots = data.getSlotsPointer();
-
-    printf("1\n");
-    std::vector<struct iovec> iov(2);
-    //while (data.getSlots()) {
-        Record record;
-        unsigned char header;
-        record.attach(
-            data.buffer_ + be16toh(slots[0].offset), be16toh(slots[0].length));
-        printf("2\n");
-        record.get(iov, &header);
-        printf("3\n");
-        data.removeRecord(iov);
-    //}
-        printf("4\n");
-
-    table->deallocate(blockid);
-    kBuffer.releaseBuf(bd);
-}
-
 TEST_CASE("IndexTest", "[p2]") 
 {
     SECTION("search")
@@ -1191,23 +1165,26 @@ TEST_CASE("IndexTest", "[p2]")
         REQUIRE(bd);
         data.attach(bd->buffer);
 
-        clearBlock(&table, 1);
-
-        // 清空所有 block
-        //for (unsigned int i = 1; i <= 9; ++i)
-            //clearBlock(&table, i);
-
-        /* long long keys[] = {
+        long long preVals[] = {
             2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47};
-        unsigned int blockids[20];
+        long long keys[5];
+        unsigned int vals[5];
         
         // 先初始化 iov 为任意值
-        setIdxIov(bigint, int_type, -1, keys, -1, blockids, iov);
+        setIdxIov(bigint, int_type, -1, keys, -1, vals, iov);
 
-        // 检查所有 block 已清空
-        for (int i = 0; i < 20; ++i) {
-            bigint->htobe(&keys[i]);
-            REQUIRE(data.search(&keys[i], sizeof(long long), iov) == EFAULT);
-        } */
+        // 检查现有的B+树
+        for (int i = 0; i < 15; ++i) {
+            bigint->htobe(&preVals[i]);
+            REQUIRE(data.search(&preVals[i], sizeof(long long), iov) == S_OK);
+        }
+
+        // 大规模插入
+        std::vector<
+
+        setIdxIov(bigint, int_type, 12, &keys[0], 120, &vals[0], iov);
+        REQUIRE(data.insert(iov) == S_OK);
+
+        kBuffer.releaseBuf(bd);
     }
 }

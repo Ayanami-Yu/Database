@@ -572,7 +572,10 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
 
     // tmp 用于检验记录是否已存在及获取记录
     // iov 保存了待插入记录所以不能被破坏
-    std::vector<struct iovec> tmp(2);
+    long long tmpKey;
+    unsigned int tmpVal;
+    std::vector<struct iovec> tmp = {
+        {&tmpKey, sizeof(long long)}, {&tmpVal, sizeof(unsigned int)}};
     std::vector<struct iovec> rec; // 上一节点要插入的记录
     std::pair<unsigned int, bool> splitRet;
     std::pair<void *, size_t> recordBuf;
