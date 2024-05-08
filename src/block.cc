@@ -588,6 +588,10 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
     parent.setTable(table_);
     root.setTable(table_);
 
+    DataType *bigint = findDataType("BIGINT");
+    bigint->betoh(iov[0].iov_base);
+    long long debugKey = *(long long *) iov[0].iov_base;
+    bigint->htobe(iov[0].iov_base);
     while (!stk.empty()) {
         blockid = stk.top();
         data.attachBuffer(bd, blockid);
@@ -596,24 +600,11 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
 
         if (data.getType() == BLOCK_TYPE_DATA) { // 叶节点            
             stk.pop(); // 准备向上回溯   
-            if (ret > 0 && ret < data.getSlots()) { // 记录已存在
-                kBuffer.releaseBuf(bd);
-
-                printf("1\n");
-                DataType *bigint = findDataType("BIGINT");
-                bigint->betoh(iov[0].iov_base);
-                printf("key = %lld\n", *(long long *) iov[0].iov_base);
-                bigint->htobe(iov[0].iov_base);
-               
-                return EFAULT;
-            }
             getRecord(data.buffer_, slots, ret, tmp);
 
-            // ret == 0 时记录仍可能已存在
+            // 检查记录是否已存在
             if (memcmp(iov[0].iov_base, tmp[0].iov_base, iov[0].iov_len) == 0) {
                 kBuffer.releaseBuf(bd);
-
-                printf("2\n");
                 return EFAULT;
             }
             pret = data.insertRecord(iov);
@@ -708,19 +699,27 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
             if (ret >= data.getSlots()) {
                 getRecord(data.buffer_, slots, data.getSlots() - 1, tmp);
                 int_type->betoh(tmp[1].iov_base);
-                stk.push(*(unsigned int *) tmp[1].iov_base);
+                unsigned int debugId = *(unsigned int *) tmp[1].iov_base;
+
+                stk.push(*(unsigned int *) tmp[1].iov_base);               
             } else {
                 getRecord(data.buffer_, slots, ret, tmp);
 
                 // 若相等则为键的右侧指针，否则为左侧
                 if (memcmp(tmp[0].iov_base, iov[0].iov_base, iov[0].iov_len) == 0) {
                     int_type->betoh(tmp[1].iov_base);
+                    unsigned int pushId = *(unsigned int *) tmp[1].iov_base;
+
                     stk.push(*(unsigned int *) tmp[1].iov_base);
                 } else if (ret > 0) {
-                    getRecord(data.buffer_, slots, ret - 1, iov);
+                    getRecord(data.buffer_, slots, ret - 1, tmp);
                     int_type->betoh(tmp[1].iov_base);
+                    unsigned int debugId = *(unsigned int *) tmp[1].iov_base;
+
                     stk.push(*(unsigned int *) tmp[1].iov_base);
                 } else {
+                    unsigned int debugId = data.getNext();
+
                     stk.push(data.getNext()); // 最左侧指针
                 }
             }
