@@ -598,6 +598,13 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
             stk.pop(); // 准备向上回溯   
             if (ret > 0 && ret < data.getSlots()) { // 记录已存在
                 kBuffer.releaseBuf(bd);
+
+                printf("1\n");
+                DataType *bigint = findDataType("BIGINT");
+                bigint->betoh(iov[0].iov_base);
+                printf("key = %lld\n", *(long long *) iov[0].iov_base);
+                bigint->htobe(iov[0].iov_base);
+               
                 return EFAULT;
             }
             getRecord(data.buffer_, slots, ret, tmp);
@@ -605,6 +612,8 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
             // ret == 0 时记录仍可能已存在
             if (memcmp(iov[0].iov_base, tmp[0].iov_base, iov[0].iov_len) == 0) {
                 kBuffer.releaseBuf(bd);
+
+                printf("2\n");
                 return EFAULT;
             }
             pret = data.insertRecord(iov);

@@ -1165,25 +1165,40 @@ TEST_CASE("IndexTest", "[p2]")
         REQUIRE(bd);
         data.attach(bd->buffer);
 
-        long long preVals[] = {
+        long long preKeys[] = {
             2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47};
-        long long keys[5];
-        unsigned int vals[5];
         
         // 先初始化 iov 为任意值
-        setIdxIov(bigint, int_type, -1, keys, -1, vals, iov);
+        long long tmpKey;
+        unsigned int tmpVal;
+        setIdxIov(bigint, int_type, -1, &tmpKey, -1, &tmpVal, iov);
 
         // 检查现有的B+树
         for (int i = 0; i < 15; ++i) {
-            bigint->htobe(&preVals[i]);
-            REQUIRE(data.search(&preVals[i], sizeof(long long), iov) == S_OK);
+            bigint->htobe(&preKeys[i]);
+            REQUIRE(data.search(&preKeys[i], sizeof(long long), iov) == S_OK);
         }
 
         // 大规模插入
-        std::vector<
+        std::vector<long long> keys = { 1, 8, 12, 15, 22, 30, 33, 44, 46, 48 };
+        std::vector<unsigned int> vals = { 10, 80, 120, 150, 220, 300, 330, 440, 460, 480 };
 
-        setIdxIov(bigint, int_type, 12, &keys[0], 120, &vals[0], iov);
-        REQUIRE(data.insert(iov) == S_OK);
+        for (int i = 50; i < 2051; i += 2) {
+            keys.push_back(i);
+            vals.push_back(i * 10);
+        }
+        for (int i = 0; i < keys.size(); ++i) {
+            setIdxIov(
+                bigint, int_type, keys[i], &keys[i], vals[i], &vals[i], iov);
+            REQUIRE(data.insert(iov) == S_OK);
+        }
+
+        // 检查插入
+        for (int i = 0; i < keys.size(); ++i) {
+            REQUIRE(data.search(&keys[i], sizeof(long long), iov) == S_OK);
+            int_type->betoh(iov[1].iov_base);
+            REQUIRE(*(unsigned int *) iov[1].iov_base == vals[i]);
+        }
 
         kBuffer.releaseBuf(bd);
     }
