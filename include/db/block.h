@@ -602,19 +602,19 @@ class DataBlock : public MetaBlock
     inline bool isUnderflow() { return getFreeSize() < DATA_FREESIZE / 2; }
 
     // 获取指向 self 的指针
-    inline unsigned int* getSelfBuf()
-    {
-        DataHeader *header = reinterpret_cast<DataHeader *>(buffer_);
-        return &(header->self);
-    }
+    //inline unsigned int* getSelfBuf()
+    //{
+        //DataHeader *header = reinterpret_cast<DataHeader *>(buffer_);
+        //return &(header->self);
+    //}
 
     // 注意不应返回 slots[idx].length
     // 因为它是整个记录而非键的长度
-    inline void *getRecordBuf(int idx)
-    {
-        Slot *slots = getSlotsPointer();
-        return buffer_ + be16toh(slots[idx].offset);
-    }
+    //inline void *getRecordBuf(int idx)
+    //{
+        //Slot *slots = getSlotsPointer();
+        //return buffer_ + be16toh(slots[idx].offset);
+    //}
 
     // 注意一定要与 releaseBuf 搭配
     inline void attachBuffer(struct BufDesp **bd, unsigned int blockid);

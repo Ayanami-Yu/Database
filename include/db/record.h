@@ -91,6 +91,7 @@ class Record
     // 从buffer拷贝某个字段
     // 实际上不进行拷贝，而是将 iov_base 指向 buffer
     // len：buffer 长度
+    // 调用之后，buffer 为网络字节序，而 len 则为主机序
     bool getByIndex(char *buffer, unsigned int *len, unsigned int index);
     // 从buffer引用各字段
     bool ref(std::vector<struct iovec> &iov, unsigned char *header);

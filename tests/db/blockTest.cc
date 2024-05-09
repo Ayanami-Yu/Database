@@ -1188,24 +1188,59 @@ TEST_CASE("IndexTest", "[p2]")
             keys.push_back(i);
             vals.push_back(i * 10);
         }
+
         for (int i = 0; i < keys.size(); ++i) {
             setIdxIov(
                 bigint, int_type, keys[i], &keys[i], vals[i], &vals[i], iov);
             REQUIRE(data.insert(iov) == S_OK);
         }
-
+        
         // 检查插入
-        for (int i = 0; i < 515; ++i) {    
-            bigint->betoh(&keys[i]);
-            printf("i = %d key = %lld ", i, keys[i]);
-            bigint->htobe(&keys[i]);
+        for (int i = 0; i < 830; ++i) { // TODO when keys.size() failed
             REQUIRE(data.search(&keys[i], sizeof(long long), iov) == S_OK);
             REQUIRE(*(unsigned int *) iov[1].iov_base == vals[i]);
-            printf("succeed\n");
+        }
+
+
+        /* for (int i = 0; i < 515; ++i) {
+            setIdxIov(
+                bigint, int_type, keys[i], &keys[i], vals[i], &vals[i], iov);
+            REQUIRE(data.insert(iov) == S_OK);
+        }
+        setIdxIov(bigint, int_type, keys[515], &keys[515], vals[515], &vals[515], iov);
+        REQUIRE(data.insert(iov) == S_OK); // 510处插入1060正确
+        
+        for (int i = 516; i < 822; ++i) {
+            setIdxIov(
+                bigint, int_type, keys[i], &keys[i], vals[i], &vals[i], iov);
+            REQUIRE(data.insert(iov) == S_OK);
+
+            printf("i = %d check keys[515]\n", i); // 直到 keys.size() 时最多到 i == 822
+            REQUIRE(data.search(&keys[515], sizeof(long long), iov) == S_OK);
+        }
+        setIdxIov(bigint, int_type, keys[822], &keys[822], vals[822], &vals[822], iov);
+        REQUIRE(data.insert(iov) == S_OK);
+        REQUIRE(data.search(&keys[515], sizeof(long long), iov) == S_OK);
+
+        // 检查插入
+        for (int i = 0; i < 514; ++i) {    
+            //bigint->betoh(&keys[i]);
+            //printf("i = %d key = %lld ", i, keys[i]);
+            //bigint->htobe(&keys[i]);
+            REQUIRE(data.search(&keys[i], sizeof(long long), iov) == S_OK);
+            REQUIRE(*(unsigned int *) iov[1].iov_base == vals[i]);
+            //printf("succeed\n");
         }
         
         // Debug
-        data.search(&keys[515], sizeof(long long), iov);
+        for (int i = 514; i <= 515; ++i) {
+            bigint->betoh(&keys[i]);
+            if (i == 514) printf("514 key = %lld\n", keys[i]);
+            if (i == 515) printf("515 key = %lld\n", keys[i]);
+            bigint->htobe(&keys[i]);
+        }
+        data.search(&keys[514], sizeof(long long), iov);
+        data.search(&keys[515], sizeof(long long), iov); */
 
         kBuffer.releaseBuf(bd);
     }
