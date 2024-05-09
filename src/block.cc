@@ -490,9 +490,18 @@ int DataBlock::search(
     unsigned int len,
     std::vector<struct iovec> &iov)
 {
+    RelationInfo *info = table_->info_;
+    unsigned int keyIdx = info->key;
+
     SuperBlock super;
     BufDesp *bd = kBuffer.borrow(table_->name_.c_str(), 0);
     super.attach(bd->buffer);
+
+    // 用于暂存搜索的结果
+    long long tmpKey;
+    unsigned int tmpVal;
+    std::vector<struct iovec> tmp = {
+        {&tmpKey, sizeof(long long)}, {&tmpVal, sizeof(unsigned int)}};
 
     std::stack<unsigned int> stk; // 存 blockid
     stk.push(super.getRoot());
@@ -518,7 +527,7 @@ int DataBlock::search(
             getRecord(data.buffer_, slots, ret, iov);
 
             // ret == 0 时仍可能记录不存在
-            if (memcmp(keybuf, iov[0].iov_base, iov[0].iov_len) != 0) {
+            if (memcmp(keybuf, iov[keyIdx].iov_base, iov[keyIdx].iov_len) != 0) {
                 kBuffer.releaseBuf(bd);
                 return EFAULT;
             } else {
@@ -527,20 +536,20 @@ int DataBlock::search(
             }
         } else { // BLOCK_TYPE_INDEX
             if (ret >= data.getSlots()) { 
-                getRecord(data.buffer_, slots, data.getSlots() - 1, iov);
-                int_type->betoh(iov[1].iov_base);
-                stk.push(*(unsigned int *) iov[1].iov_base);
+                getRecord(data.buffer_, slots, data.getSlots() - 1, tmp);
+                int_type->betoh(tmp[1].iov_base);
+                stk.push(*(unsigned int *) tmp[1].iov_base);
             } else {
-                getRecord(data.buffer_, slots, ret, iov);
+                getRecord(data.buffer_, slots, ret, tmp);
 
                 // 若相等则为键的右侧指针，否则为左侧
-                if (memcmp(keybuf, iov[0].iov_base, iov[0].iov_len) == 0) {
-                    int_type->betoh(iov[1].iov_base);
-                    stk.push(*(unsigned int *) iov[1].iov_base);
+                if (memcmp(keybuf, tmp[keyIdx].iov_base, tmp[keyIdx].iov_len) == 0) {
+                    int_type->betoh(tmp[1].iov_base);
+                    stk.push(*(unsigned int *) tmp[1].iov_base);
                 } else if (ret > 0) {
-                    getRecord(data.buffer_, slots, ret - 1, iov);
-                    int_type->betoh(iov[1].iov_base);
-                    stk.push(*(unsigned int *) iov[1].iov_base);
+                    getRecord(data.buffer_, slots, ret - 1, tmp);
+                    int_type->betoh(tmp[1].iov_base);
+                    stk.push(*(unsigned int *) tmp[1].iov_base);
                 } else {
                     stk.push(data.getNext()); // 最左侧指针
                 }
@@ -550,23 +559,22 @@ int DataBlock::search(
     return EFAULT;
 }
 
-void DataBlock::attachBuffer(struct BufDesp *bd, unsigned int blockid)
+void DataBlock::attachBuffer(struct BufDesp **bd, unsigned int blockid)
 {
-    bd = kBuffer.borrow(table_->name_.c_str(), blockid);
-    attach(bd->buffer);
+    *bd = kBuffer.borrow(table_->name_.c_str(), blockid);
+    attach((*bd)->buffer);
 }
 
 int DataBlock::insert(std::vector<struct iovec> &iov) 
 {
-    // Debug
-    DataType *bigint = findDataType("BIGINT");
-    bigint->betoh(iov[0].iov_base);
-    printf("key = %lld\n", *(long long *) iov[0].iov_base);
-    bigint->htobe(iov[0].iov_base);
-
     RelationInfo *info = table_->info_;
     unsigned int keyIdx = info->key;
-    //DataType *type = info->fields[key].type;
+    DataType *keyType = info->fields[keyIdx].type;
+
+    // Debug
+    keyType->betoh(iov[keyIdx].iov_base);
+    printf("key = %lld\n", *(long long *) iov[0].iov_base);
+    keyType->htobe(iov[keyIdx].iov_base);
 
     SuperBlock super;
     BufDesp *bd, *bd2 = nullptr, *bd3 = nullptr;
@@ -577,6 +585,7 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
     stk.push(super.getRoot());
     kBuffer.releaseBuf(bd); // 释放超块
 
+    void *recordBuf;
     unsigned int blockid;
     bool needToSplit = false; // 用于当前节点判断是否需分裂后再次插入
 
@@ -588,8 +597,7 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
         {&tmpKey, sizeof(long long)}, {&tmpVal, sizeof(unsigned int)}};
     std::vector<struct iovec> rec; // 上一节点要插入的记录
     std::pair<unsigned int, bool> splitRet;
-    std::pair<bool, unsigned int> pret;
-    void *recordBuf;
+    std::pair<bool, unsigned int> pret;    
     DataType *int_type = findDataType("INT");
 
     DataBlock data, next, parent, root; // 复用时无需再 setTable
@@ -598,41 +606,45 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
     parent.setTable(table_);
     root.setTable(table_);
 
-    //DataType *bigint = findDataType("BIGINT");
-    bigint->betoh(iov[0].iov_base);
+    keyType->betoh(iov[keyIdx].iov_base);
     long long debugKey = *(long long *) iov[0].iov_base;
-    bigint->htobe(iov[0].iov_base);
+    keyType->htobe(iov[keyIdx].iov_base);
     while (!stk.empty()) {
         blockid = stk.top();
-        data.attachBuffer(bd, blockid);
+        data.attachBuffer(&bd, blockid);
         Slot *slots = data.getSlotsPointer();
-        unsigned short ret = data.searchRecord(iov[0].iov_base, iov[0].iov_len);  
+        unsigned short ret = data.searchRecord(iov[keyIdx].iov_base, iov[keyIdx].iov_len);  
 
         if (data.getType() == BLOCK_TYPE_DATA) { // 叶节点            
             stk.pop(); // 准备向上回溯   
             getRecord(data.buffer_, slots, ret, tmp);
 
             // 检查记录是否已存在
-            if (memcmp(iov[0].iov_base, tmp[0].iov_base, iov[0].iov_len) == 0) {
+            if (memcmp(iov[keyIdx].iov_base, tmp[keyIdx].iov_base, iov[keyIdx].iov_len) == 0) {
                 kBuffer.releaseBuf(bd);
                 return EFAULT;
             }
             pret = data.insertRecord(iov);
             if (!pret.first && pret.second != -1) { // Block 空间不足
                 splitRet = data.split(pret.second, iov);
-                next.attachBuffer(bd2, splitRet.first);
+                next.attachBuffer(&bd2, splitRet.first);
+                next.setType(BLOCK_TYPE_DATA);
 
+                std::pair<bool, unsigned short> debugRet;
                 if (splitRet.second) data.insertRecord(iov);
-                else next.insertRecord(iov);
+                // else next.insertRecord(iov);
+                else debugRet = next.insertRecord(iov);
 
                 recordBuf = next.getRecordBuf(0); // 获取新 block 的最小键
                 rec = {
                     {recordBuf, iov[keyIdx].iov_len},
                     {next.getSelfBuf(), sizeof(unsigned int)}}; // 都为网络字节序
+
+                unsigned char debugRef = bd2->ref.load();
                 kBuffer.releaseBuf(bd2);
 
                 blockid = stk.top();
-                parent.attachBuffer(bd2, blockid);
+                parent.attachBuffer(&bd2, blockid);
                 pret = parent.insertRecord(rec);
                 if (!pret.first && pret.second != -1) // 父节点需要分裂
                     needToSplit = true;
@@ -647,9 +659,10 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
 
                 if (needToSplit) {
                     needToSplit = false;
-                    data.attachBuffer(bd, blockid);
+                    data.attachBuffer(&bd, blockid);
                     splitRet = data.split(pret.second, rec);
-                    next.attachBuffer(bd2, splitRet.first);
+                    next.attachBuffer(&bd2, splitRet.first);
+                    next.setType(BLOCK_TYPE_INDEX);
 
                     if (splitRet.second)
                         data.insertRecord(rec);
@@ -666,7 +679,7 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
 
                     // 尝试给父节点插入中位键
                     blockid = stk.top();
-                    parent.attachBuffer(bd, blockid);
+                    parent.attachBuffer(&bd, blockid);
                     pret = parent.insertRecord(rec);
                     if (!pret.first && pret.second != -1) needToSplit = true;
 
@@ -678,9 +691,10 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
                 super.attach(bd->buffer);
 
                 blockid = super.getRoot();
-                data.attachBuffer(bd2, blockid); // 获取根
+                data.attachBuffer(&bd2, blockid); // 获取根
                 splitRet = data.split(pret.second, rec);
-                next.attachBuffer(bd3, splitRet.first); // 获取新 block
+                next.attachBuffer(&bd3, splitRet.first); // 获取新 block
+                next.setType(BLOCK_TYPE_INDEX);
 
                 if (splitRet.second)
                     data.insertRecord(rec);
@@ -696,9 +710,10 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
                     {next.getSelfBuf(), sizeof(unsigned int)}};
 
                 unsigned int rootId = table_->allocate(); // 申请新 block 作为根
-                root.attachBuffer(bd2, rootId);
+                root.attachBuffer(&bd2, rootId);
                 root.insertRecord(rec);
                 root.setNext(data.getSelf());
+                root.setType(BLOCK_TYPE_INDEX);
                 super.setRoot(rootId); // 维护超块中的根 blockid
 
                 kBuffer.releaseBuf(bd);
@@ -716,7 +731,7 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
                 getRecord(data.buffer_, slots, ret, tmp);
 
                 // 若相等则为键的右侧指针，否则为左侧
-                if (memcmp(tmp[0].iov_base, iov[0].iov_base, iov[0].iov_len) == 0) {
+                if (memcmp(tmp[keyIdx].iov_base, iov[keyIdx].iov_base, iov[keyIdx].iov_len) == 0) {
                     int_type->betoh(tmp[1].iov_base);
                     unsigned int pushId = *(unsigned int *) tmp[1].iov_base;
 

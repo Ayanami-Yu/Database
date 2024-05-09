@@ -943,6 +943,7 @@ TEST_CASE("BlockTest", "[p1]")
 }
 
 // 在函数内先调用 htobe
+// keybuf 和 idbuf 在调用后为网络字节序
 inline void setIdxIov(
     DataType *bigint,
     DataType *int_type,
@@ -1187,26 +1188,24 @@ TEST_CASE("IndexTest", "[p2]")
             keys.push_back(i);
             vals.push_back(i * 10);
         }
-        for (int i = 0; i < 822; ++i) {
+        for (int i = 0; i < keys.size(); ++i) {
             setIdxIov(
                 bigint, int_type, keys[i], &keys[i], vals[i], &vals[i], iov);
-            //bigint->betoh(iov[0].iov_base);
-            //printf("i = %d key = %lld\n", i, *(long long *) iov[0].iov_base);
-            //bigint->htobe(iov[0].iov_base);
             REQUIRE(data.insert(iov) == S_OK);
         }
 
-        // Debug
-        printf("keys[822] = %lld\n", keys[822]);
-        setIdxIov(bigint, int_type, keys[822], &keys[822], vals[822], &vals[822], iov);        
-        REQUIRE(data.insert(iov) == S_OK);
-
         // 检查插入
-        for (int i = 0; i < keys.size(); ++i) {
+        for (int i = 0; i < 515; ++i) {    
+            bigint->betoh(&keys[i]);
+            printf("i = %d key = %lld ", i, keys[i]);
+            bigint->htobe(&keys[i]);
             REQUIRE(data.search(&keys[i], sizeof(long long), iov) == S_OK);
-            int_type->betoh(iov[1].iov_base);
             REQUIRE(*(unsigned int *) iov[1].iov_base == vals[i]);
+            printf("succeed\n");
         }
+        
+        // Debug
+        data.search(&keys[515], sizeof(long long), iov);
 
         kBuffer.releaseBuf(bd);
     }

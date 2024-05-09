@@ -617,7 +617,7 @@ class DataBlock : public MetaBlock
     }
 
     // 注意一定要与 releaseBuf 搭配
-    inline void attachBuffer(struct BufDesp *bd, unsigned int blockid);
+    inline void attachBuffer(struct BufDesp **bd, unsigned int blockid);
 
     // len 为 keybuf 指向的 buffer 的长度
     // 需先将 keybuf 转换为网络字节序
