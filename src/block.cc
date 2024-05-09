@@ -558,6 +558,16 @@ void DataBlock::attachBuffer(struct BufDesp *bd, unsigned int blockid)
 
 int DataBlock::insert(std::vector<struct iovec> &iov) 
 {
+    // Debug
+    DataType *bigint = findDataType("BIGINT");
+    bigint->betoh(iov[0].iov_base);
+    printf("key = %lld\n", *(long long *) iov[0].iov_base);
+    bigint->htobe(iov[0].iov_base);
+
+    RelationInfo *info = table_->info_;
+    unsigned int keyIdx = info->key;
+    //DataType *type = info->fields[key].type;
+
     SuperBlock super;
     BufDesp *bd, *bd2 = nullptr, *bd3 = nullptr;
     bd = kBuffer.borrow(table_->name_.c_str(), 0);
@@ -578,8 +588,8 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
         {&tmpKey, sizeof(long long)}, {&tmpVal, sizeof(unsigned int)}};
     std::vector<struct iovec> rec; // 上一节点要插入的记录
     std::pair<unsigned int, bool> splitRet;
-    std::pair<void *, size_t> recordBuf;
     std::pair<bool, unsigned int> pret;
+    void *recordBuf;
     DataType *int_type = findDataType("INT");
 
     DataBlock data, next, parent, root; // 复用时无需再 setTable
@@ -588,7 +598,7 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
     parent.setTable(table_);
     root.setTable(table_);
 
-    DataType *bigint = findDataType("BIGINT");
+    //DataType *bigint = findDataType("BIGINT");
     bigint->betoh(iov[0].iov_base);
     long long debugKey = *(long long *) iov[0].iov_base;
     bigint->htobe(iov[0].iov_base);
@@ -617,7 +627,7 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
 
                 recordBuf = next.getRecordBuf(0); // 获取新 block 的最小键
                 rec = {
-                    {recordBuf.first, recordBuf.second},
+                    {recordBuf, iov[keyIdx].iov_len},
                     {next.getSelfBuf(), sizeof(unsigned int)}}; // 都为网络字节序
                 kBuffer.releaseBuf(bd2);
 
@@ -649,7 +659,7 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
                     recordBuf = next.getRecordBuf(0);
                     rec.clear();
                     rec = {
-                        {recordBuf.first, recordBuf.second},
+                        {recordBuf, iov[keyIdx].iov_len},
                         {next.getSelfBuf(), sizeof(unsigned int)}};
                     kBuffer.releaseBuf(bd);
                     kBuffer.releaseBuf(bd2);
@@ -682,7 +692,7 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
                 recordBuf = next.getRecordBuf(0);
                 rec.clear();
                 rec = {
-                    {recordBuf.first, recordBuf.second},
+                    {recordBuf, iov[keyIdx].iov_len},
                     {next.getSelfBuf(), sizeof(unsigned int)}};
 
                 unsigned int rootId = table_->allocate(); // 申请新 block 作为根

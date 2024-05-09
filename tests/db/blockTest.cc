@@ -1190,14 +1190,15 @@ TEST_CASE("IndexTest", "[p2]")
         for (int i = 0; i < 822; ++i) {
             setIdxIov(
                 bigint, int_type, keys[i], &keys[i], vals[i], &vals[i], iov);
-            bigint->betoh(iov[0].iov_base);
-            printf("i = %d key = %lld\n", i, *(long long *) iov[0].iov_base);
-            bigint->htobe(iov[0].iov_base);
+            //bigint->betoh(iov[0].iov_base);
+            //printf("i = %d key = %lld\n", i, *(long long *) iov[0].iov_base);
+            //bigint->htobe(iov[0].iov_base);
             REQUIRE(data.insert(iov) == S_OK);
         }
 
         // Debug
-        setIdxIov(bigint, int_type, keys[822], &keys[822], vals[822], &vals[822], iov);
+        printf("keys[822] = %lld\n", keys[822]);
+        setIdxIov(bigint, int_type, keys[822], &keys[822], vals[822], &vals[822], iov);        
         REQUIRE(data.insert(iov) == S_OK);
 
         // 检查插入

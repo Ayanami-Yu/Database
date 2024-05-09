@@ -608,11 +608,12 @@ class DataBlock : public MetaBlock
         return &(header->self);
     }
 
-    inline std::pair<void *, size_t> getRecordBuf(int idx)
+    // 注意不应返回 slots[idx].length
+    // 因为它是整个记录而非键的长度
+    inline void *getRecordBuf(int idx)
     {
         Slot *slots = getSlotsPointer();
-        return std::make_pair(
-            buffer_ + be16toh(slots[idx].offset), be16toh(slots[idx].length));
+        return buffer_ + be16toh(slots[idx].offset);
     }
 
     // 注意一定要与 releaseBuf 搭配
