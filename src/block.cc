@@ -478,6 +478,17 @@ bool DataBlock::removeRecord(std::vector<struct iovec>& iov)
         type->search(buffer_, key, iov[key].iov_base, iov[key].iov_len);
     if (index >= getSlots()) return false; // 记录不存在
 
+    // 当 index 处于范围中时仍可能记录不存在
+    Slot *slots = getSlotsPointer();
+    Record record;
+    record.attach(
+        buffer_ + be16toh(slots[index].offset), be16toh(slots[index].length));
+
+    long long tmpKey = 0;
+    unsigned int tmpKeyLen = (unsigned int) iov[key].iov_len;
+    record.getByIndex((char *) &tmpKey, &tmpKeyLen, key);
+    if (memcmp(&tmpKey, iov[key].iov_base, iov[key].iov_len) != 0) return false;
+
     // 设置记录的 tombstone，挤压 slots
     // 修改 slots 数目，freesize 加回删除的 slot
     deallocate(index);
@@ -525,24 +536,24 @@ int DataBlock::search(
                 return EFAULT;
             } 
             DataType *bigint = findDataType("BIGINT");
-            bigint->betoh(iov[keyIdx].iov_base);
-            long long debug = *(long long *) iov[keyIdx].iov_base;
-            bigint->htobe(iov[keyIdx].iov_base);
+            // bigint->betoh(iov[keyIdx].iov_base);
+            // long long debug = *(long long *) iov[keyIdx].iov_base;
+            // bigint->htobe(iov[keyIdx].iov_base);
 
             getRecord(data.buffer_, slots, ret, iov);
 
-            bigint->betoh(iov[keyIdx].iov_base);
-            long long debug3 = *(long long *) iov[keyIdx].iov_base;
-            bigint->htobe(iov[keyIdx].iov_base);
+            // bigint->betoh(iov[keyIdx].iov_base);
+            // long long debug3 = *(long long *) iov[keyIdx].iov_base;
+            // bigint->htobe(iov[keyIdx].iov_base);
 
             // ret == 0 时仍可能记录不存在
             if (memcmp(keybuf, iov[keyIdx].iov_base, iov[keyIdx].iov_len) != 0) {                
-                bigint->betoh(keybuf);
-                bigint->betoh(iov[keyIdx].iov_base);
-                long long debug1 = *(long long *) keybuf,
-                          debug2 = *(long long *) iov[keyIdx].iov_base;
-                bigint->htobe(keybuf);
-                bigint->htobe(iov[keyIdx].iov_base);
+                // bigint->betoh(keybuf);
+                // bigint->betoh(iov[keyIdx].iov_base);
+                // long long debug1 = *(long long *) keybuf,
+                          // debug2 = *(long long *) iov[keyIdx].iov_base;
+                // bigint->htobe(keybuf);
+                // bigint->htobe(iov[keyIdx].iov_base);
 
                 kBuffer.releaseBuf(bd);
                 return EFAULT;
@@ -551,7 +562,7 @@ int DataBlock::search(
                 return S_OK;
             }
         } else { // BLOCK_TYPE_INDEX
-            unsigned short debugSlots = data.getSlots();
+            // unsigned short debugSlots = data.getSlots();
 
             if (ret >= data.getSlots()) { 
                 getRecord(data.buffer_, slots, data.getSlots() - 1, tmp);
@@ -588,6 +599,7 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
     RelationInfo *info = table_->info_;
     unsigned int keyIdx = info->key;
     DataType *keyType = info->fields[keyIdx].type;
+    DataType *int_type = findDataType("INT");
 
     SuperBlock super;
     BufDesp *bd, *bd2 = nullptr, *bd3 = nullptr;
@@ -598,7 +610,6 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
     stk.push(super.getRoot());
     kBuffer.releaseBuf(bd); // 释放超块
 
-    //void *recordBuf;
     Record tmpRecord;
     std::vector<char> tmpKeyBuf(iov[keyIdx].iov_len);
     unsigned int tmpKeyLen = (unsigned int) iov[keyIdx].iov_len;
@@ -615,8 +626,7 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
         {&tmpKey, sizeof(long long)}, {&tmpVal, sizeof(unsigned int)}};
     std::vector<struct iovec> rec; // 上一节点要插入的记录
     std::pair<unsigned int, bool> splitRet;
-    std::pair<bool, unsigned int> pret;    
-    DataType *int_type = findDataType("INT");
+    std::pair<bool, unsigned int> pret;        
 
     DataBlock data, next, parent, root; // 复用时无需再 setTable
     data.setTable(table_);
@@ -624,9 +634,9 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
     parent.setTable(table_);
     root.setTable(table_);
 
-    keyType->betoh(iov[keyIdx].iov_base);
-    long long debugKey = *(long long *) iov[0].iov_base;
-    keyType->htobe(iov[keyIdx].iov_base);
+    // keyType->betoh(iov[keyIdx].iov_base);
+    // long long debugKey = *(long long *) iov[0].iov_base;
+    // keyType->htobe(iov[keyIdx].iov_base);
     while (!stk.empty()) {
         blockid = stk.top();
         data.attachBuffer(&bd, blockid);
@@ -648,20 +658,10 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
                 next.attachBuffer(&bd2, splitRet.first);
                 next.setType(BLOCK_TYPE_DATA);
 
-                std::pair<bool, unsigned short> debugRet;
+                // std::pair<bool, unsigned short> debugRet;
                 if (splitRet.second) data.insertRecord(iov);
-                // else next.insertRecord(iov);
-                else debugRet = next.insertRecord(iov);
-
-                //recordBuf = next.getRecordBuf(0); // 获取新 block 的最小键
-
-                //keyType->betoh(recordBuf);
-                //long long debugRec = *(long long *) recordBuf;
-                //keyType->htobe(recordBuf);
-                //void *debugRecordBuf = next.getRecordBuf(next.getSlots() - 1);
-                //keyType->betoh(debugRecordBuf);        
-                //debugRec = *(long long *) debugRecordBuf;
-                //keyType->htobe(debugRecordBuf);
+                else next.insertRecord(iov);
+                // else debugRet = next.insertRecord(iov);
 
                 // 获取新 block 的最小键
                 Slot *nextSlots = next.getSlotsPointer();
@@ -676,14 +676,6 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
                 rec = {
                     {&tmpKeyBuf[0], tmpKeyLen},
                     {&tmpNextId, sizeof(unsigned int)}}; // 都为网络字节序
-
-                // Debug
-                keyType->betoh(rec[0].iov_base);
-                int_type->betoh(rec[1].iov_base);
-                long long debugRec = *(long long *) rec[0].iov_base;
-                unsigned int debugId = *(unsigned int *) rec[1].iov_base;
-                keyType->htobe(rec[0].iov_base);
-                int_type->htobe(rec[1].iov_base);
 
                 kBuffer.releaseBuf(bd2);
 
@@ -712,12 +704,6 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
                         data.insertRecord(rec);
                     else
                         next.insertRecord(rec);
-
-                    //recordBuf = next.getRecordBuf(0);
-                    //rec.clear();
-                    //rec = {
-                        //{recordBuf, iov[keyIdx].iov_len},
-                        //{next.getSelfBuf(), sizeof(unsigned int)}};
 
                     Slot *nextSlots = next.getSlotsPointer();
                     tmpRecord.attach(
@@ -761,12 +747,6 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
                 kBuffer.releaseBuf(bd2);
                 kBuffer.releaseBuf(bd3);
 
-                //recordBuf = next.getRecordBuf(0);
-                //rec.clear();
-                //rec = {
-                    //{recordBuf, iov[keyIdx].iov_len},
-                    //{next.getSelfBuf(), sizeof(unsigned int)}};
-
                 Slot *nextSlots = next.getSlotsPointer();
                 tmpRecord.attach(
                     next.buffer_ + be16toh(nextSlots[0].offset),
@@ -795,7 +775,7 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
             if (ret >= data.getSlots()) {
                 getRecord(data.buffer_, slots, data.getSlots() - 1, tmp);
                 int_type->betoh(tmp[1].iov_base);
-                unsigned int debugId = *(unsigned int *) tmp[1].iov_base;
+                // unsigned int debugId = *(unsigned int *) tmp[1].iov_base;
 
                 stk.push(*(unsigned int *) tmp[1].iov_base);               
             } else {
@@ -810,11 +790,11 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
                 } else if (ret > 0) {
                     getRecord(data.buffer_, slots, ret - 1, tmp);
                     int_type->betoh(tmp[1].iov_base);
-                    unsigned int debugId = *(unsigned int *) tmp[1].iov_base;
+                    // unsigned int debugId = *(unsigned int *) tmp[1].iov_base;
 
                     stk.push(*(unsigned int *) tmp[1].iov_base);
                 } else {
-                    unsigned int debugId = data.getNext();
+                    // unsigned int debugId = data.getNext();
 
                     stk.push(data.getNext()); // 最左侧指针
                 }
@@ -827,6 +807,11 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
 
 int DataBlock::remove(std::vector<struct iovec> &iov)
 {
+    RelationInfo *info = table_->info_;
+    unsigned int keyIdx = info->key;
+    DataType *keyType = info->fields[keyIdx].type;
+    DataType *int_type = findDataType("INT");
+
     SuperBlock super;
     BufDesp *bd = kBuffer.borrow(table_->name_.c_str(), 0);
     super.attach(bd->buffer);
@@ -835,59 +820,39 @@ int DataBlock::remove(std::vector<struct iovec> &iov)
     stk.push(super.getRoot());
     kBuffer.releaseBuf(bd); // 释放超块
 
-    DataType *int_type = findDataType("INT");
-    std::vector<struct iovec> tmp(2);
+    unsigned int blockid;
+
+    // 用于检验记录是否已存在
+    long long tmpKey;
+    unsigned int tmpVal;
+    std::vector<struct iovec> tmp = {
+        {&tmpKey, sizeof(long long)}, {&tmpVal, sizeof(unsigned int)}};
+
+    DataBlock data;
+    data.setTable(table_);
+    
     while (!stk.empty()) {
-        unsigned int blockid = stk.top();
-        stk.pop();
-
-        DataBlock data;
-        bd = kBuffer.borrow(table_->name_.c_str(), blockid);
-        data.attach(bd->buffer);
-        data.setTable(table_);
+        blockid = stk.top();
+        data.attachBuffer(&bd, blockid);
         Slot *slots = data.getSlotsPointer();
+        unsigned short ret =
+            data.searchRecord(iov[keyIdx].iov_base, iov[keyIdx].iov_len);
 
-        unsigned short ret = data.searchRecord(iov[0].iov_base, iov[0].iov_len);
         if (data.getType() == BLOCK_TYPE_DATA) { // 叶节点
-            if (ret >= data.getSlots()) {        // 记录不存在
-                kBuffer.releaseBuf(bd);
-                return EFAULT;
-            }
+            stk.pop();                           // 准备向上回溯
             getRecord(data.buffer_, slots, ret, tmp);
 
-            // ret == 0 时仍可能记录不存在
-            if (memcmp(iov[0].iov_base, tmp[0].iov_base, iov[0].iov_len) != 0) {
+            // 检查记录是否已存在
+            if (memcmp(
+                    iov[keyIdx].iov_base,
+                    tmp[keyIdx].iov_base,
+                    iov[keyIdx].iov_len) == 0) {
                 kBuffer.releaseBuf(bd);
                 return EFAULT;
-            } else { // 找到待删除记录
-                data.removeRecord(iov);
-                if (data.isUnderflow()) {}
-
-                kBuffer.releaseBuf(bd);
-                return S_OK;
             }
-        } else { // BLOCK_TYPE_INDEX
-            if (ret >= data.getSlots()) {
-                getRecord(data.buffer_, slots, data.getSlots() - 1, tmp);
-                int_type->betoh(tmp[1].iov_base);
-                stk.push(*(unsigned int *) tmp[1].iov_base);
-            } else {
-                getRecord(data.buffer_, slots, ret, tmp);
 
-                // 若相等则为键的右侧指针，否则为左侧
-                if (memcmp(iov[0].iov_base, tmp[0].iov_base, iov[0].iov_len) ==
-                    0) {
-                    int_type->betoh(tmp[1].iov_base);
-                    stk.push(*(unsigned int *) tmp[1].iov_base);
-                } else if (ret > 0) {
-                    getRecord(data.buffer_, slots, ret - 1, tmp);
-                    int_type->betoh(tmp[1].iov_base);
-                    stk.push(*(unsigned int *) tmp[1].iov_base);
-                } else {
-                    stk.push(data.getNext()); // 最左侧指针
-                }
-            }
         }
+        
     }
     return EFAULT;
 }

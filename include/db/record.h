@@ -88,7 +88,7 @@ class Record
     // 从buffer拷贝各字段
     // 同时将该记录的头部拷贝到header中
     bool get(std::vector<struct iovec> &iov, unsigned char *header);
-    // 从buffer拷贝某个字段
+    // 将某个字段拷贝到 buffer
     // 实际上不进行拷贝，而是将 iov_base 指向 buffer
     // len：buffer 长度
     // 调用之后，buffer 为网络字节序，而 len 则为主机序

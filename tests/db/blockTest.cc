@@ -795,11 +795,12 @@ TEST_CASE("BlockTest", "[p1]")
         DataType *bigint = findDataType("BIGINT");
         DataType *char_type = findDataType("CHAR");
         DataType *varchar = findDataType("VARCHAR");
+
         std::vector<struct iovec> iov(3);
         long long nid;
         char phone[20];
         char *addr = SHORT_ADDR;
-
+        
         // 第1条记录
         nid = 1;
         strcpy_s(phone, "11111111111");
@@ -935,7 +936,35 @@ TEST_CASE("BlockTest", "[p1]")
         REQUIRE(!data.removeRecord(iov));
 
         // 测试记录存在
-        REQUIRE(data.insertRecord(iov).first == true);
+        REQUIRE(data.insertRecord(iov).first);
+        REQUIRE(data.removeRecord(iov));
+
+        // 先插入多条记录
+        nid = 2;
+        htobeIov(bigint, nullptr, nullptr, &nid, phone, addr);
+        setIov(iov, &nid, phone, (void *) addr);
+        REQUIRE(data.insertRecord(iov).first);
+
+        nid = 4;
+        htobeIov(bigint, nullptr, nullptr, &nid, phone, addr);
+        setIov(iov, &nid, phone, (void *) addr);
+        REQUIRE(data.insertRecord(iov).first);
+
+        nid = 5;
+        htobeIov(bigint, nullptr, nullptr, &nid, phone, addr);
+        setIov(iov, &nid, phone, (void *) addr);
+        REQUIRE(data.insertRecord(iov).first);
+
+        // 测试待删除主键的值虽在范围中但不存在
+        nid = 3;
+        htobeIov(bigint, nullptr, nullptr, &nid, phone, addr);
+        setIov(iov, &nid, phone, (void *) addr);
+        REQUIRE(!data.removeRecord(iov));
+
+        // 测试记录存在
+        nid = 4;
+        htobeIov(bigint, nullptr, nullptr, &nid, phone, addr);
+        setIov(iov, &nid, phone, (void *) addr);
         REQUIRE(data.removeRecord(iov));
 
         kBuffer.releaseBuf(bd);
@@ -1194,54 +1223,20 @@ TEST_CASE("IndexTest", "[p2]")
                 bigint, int_type, keys[i], &keys[i], vals[i], &vals[i], iov);
             REQUIRE(data.insert(iov) == S_OK);
         }
+
+        printf("key size = %zd\n", keys.size());
         
         // 检查插入
-        for (int i = 0; i < 830; ++i) { // TODO when keys.size() failed
+        for (int i = 0; i < keys.size(); ++i) {
             REQUIRE(data.search(&keys[i], sizeof(long long), iov) == S_OK);
             REQUIRE(*(unsigned int *) iov[1].iov_base == vals[i]);
-        }
-
-
-        /* for (int i = 0; i < 515; ++i) {
-            setIdxIov(
-                bigint, int_type, keys[i], &keys[i], vals[i], &vals[i], iov);
-            REQUIRE(data.insert(iov) == S_OK);
-        }
-        setIdxIov(bigint, int_type, keys[515], &keys[515], vals[515], &vals[515], iov);
-        REQUIRE(data.insert(iov) == S_OK); // 510处插入1060正确
-        
-        for (int i = 516; i < 822; ++i) {
-            setIdxIov(
-                bigint, int_type, keys[i], &keys[i], vals[i], &vals[i], iov);
-            REQUIRE(data.insert(iov) == S_OK);
-
-            printf("i = %d check keys[515]\n", i); // 直到 keys.size() 时最多到 i == 822
-            REQUIRE(data.search(&keys[515], sizeof(long long), iov) == S_OK);
-        }
-        setIdxIov(bigint, int_type, keys[822], &keys[822], vals[822], &vals[822], iov);
-        REQUIRE(data.insert(iov) == S_OK);
-        REQUIRE(data.search(&keys[515], sizeof(long long), iov) == S_OK);
-
-        // 检查插入
-        for (int i = 0; i < 514; ++i) {    
-            //bigint->betoh(&keys[i]);
-            //printf("i = %d key = %lld ", i, keys[i]);
-            //bigint->htobe(&keys[i]);
-            REQUIRE(data.search(&keys[i], sizeof(long long), iov) == S_OK);
-            REQUIRE(*(unsigned int *) iov[1].iov_base == vals[i]);
-            //printf("succeed\n");
-        }
-        
-        // Debug
-        for (int i = 514; i <= 515; ++i) {
-            bigint->betoh(&keys[i]);
-            if (i == 514) printf("514 key = %lld\n", keys[i]);
-            if (i == 515) printf("515 key = %lld\n", keys[i]);
-            bigint->htobe(&keys[i]);
-        }
-        data.search(&keys[514], sizeof(long long), iov);
-        data.search(&keys[515], sizeof(long long), iov); */
+        }       
 
         kBuffer.releaseBuf(bd);
+    }
+
+    SECTION("remove")
+    {
+
     }
 }
