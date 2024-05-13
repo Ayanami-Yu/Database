@@ -805,6 +805,116 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
     return EFAULT;
 }
 
+bool DataBlock::borrow(std::pair<bool, unsigned short> idx, unsigned int blockid)
+{
+    bool ret = false;
+    unsigned short leFreesize = 0, riFreesize = 0;
+    Slot *slots = getSlotsPointer();
+    BufDesp *bd = nullptr, *bd2 = nullptr;
+    unsigned int leftId = -1, rightId = -1, tmpLen = sizeof(unsigned int);
+    DataBlock data, sibling;
+    data.setTable(table_);
+    sibling.setTable(table_);
+    data.attachBuffer(&bd2, blockid);
+    
+    // 用于记录的插入和删除
+    long long key;
+    unsigned int val;
+    std::vector<struct iovec> iov = {
+        {&key, sizeof(long long)}, {&val, sizeof(unsigned int)}};
+
+    // 用于本节点替换原先的中位键
+    long long splitKey;
+    unsigned int splitVal;
+    std::vector<struct iovec> splitIov = {
+        {&splitKey, sizeof(long long)}, {&splitVal, sizeof(unsigned int)}};
+
+    if (idx.first) {
+        DataBlock left;
+        left.setTable(table_);
+        if (!idx.second) { // 从左往右数第二个子节点
+            leftId = getNext();
+            left.attachBuffer(&bd, leftId);
+        } else {
+            // 当对应 slots 中下标不为0时，获取左边 block 的键数
+            Record record;
+            record.attach(
+                buffer_ + be16toh(slots[idx.second - 1].offset),
+                be16toh(slots[idx.second - 1].length));
+            record.getByIndex((char *) &leftId, &tmpLen, 1);
+            left.attachBuffer(&bd, leftId);
+        }
+        leFreesize = left.getFreeSize();
+        kBuffer.releaseBuf(bd);
+    }
+    if (idx.second < getSlots() - 1) { // 不为最右的子节点
+        Record record;
+        record.attach(
+            buffer_ + be16toh(slots[idx.second + 1].offset),
+            be16toh(slots[idx.second + 1].length));
+        record.getByIndex((char *) &rightId, &tmpLen, 1);
+
+        DataBlock right;
+        right.setTable(table_);
+        right.attachBuffer(&bd, rightId);
+        riFreesize = right.getFreeSize();
+        kBuffer.releaseBuf(bd);
+    }
+
+    // 因为子节点不为根，所以必然有兄弟节点
+    if (leFreesize >= riFreesize) {
+        sibling.attachBuffer(&bd, leftId);          
+        getRecord( // 获取最右键
+            sibling.buffer_,
+            sibling.getSlotsPointer(),
+            sibling.getSlots() - 1,
+            iov);
+        sibling.removeRecord(iov);
+        if (sibling.isUnderflow()) { // 若借出键后会下溢
+            sibling.insertRecord(iov);
+            ret = false;
+        } else {
+            data.insertRecord(iov);
+
+            // 修改两个子节点对应的中位键
+            getRecord(buffer_, getSlotsPointer(), idx.second, splitIov);
+            removeRecord(splitIov);
+            splitKey = *(long long *) iov[0].iov_base; // iov 此时的值为被移动的记录
+            splitVal = blockid;
+
+            // 再次插入本节点时仍需考虑分裂
+            // 因为尽管 blockid 的长度固定，但主键仍有可能是变长的
+            // 由于变长主键比较少见，在此暂不考虑
+            insertRecord(splitIov);
+            ret = true;
+        }
+    } else {
+        sibling.attachBuffer(&bd, rightId);
+        //getRecord( // 获取最左键
+            //sibling.buffer_, sibling.getSlotsPointer(), 0, iov);
+        sibling.removeRecord(iov);
+        if (sibling.isUnderflow()) { // 若借出键后会下溢
+            sibling.insertRecord(iov);
+            ret = false;
+        } else {
+            data.insertRecord(iov);
+
+            // 修改两个子节点对应的中位键
+            getRecord(buffer_, getSlotsPointer(), idx.second + 1, splitIov);
+            removeRecord(splitIov);
+            splitKey =
+                *(long long *) iov[0].iov_base; // iov 此时的值为被移动的记录
+            splitVal = blockid;
+
+            insertRecord(splitIov);
+            ret = true;
+        }
+    }       
+    kBuffer.releaseBuf(bd);
+    kBuffer.releaseBuf(bd2);
+    return ret;
+}
+
 int DataBlock::remove(std::vector<struct iovec> &iov)
 {
     RelationInfo *info = table_->info_;
@@ -813,14 +923,19 @@ int DataBlock::remove(std::vector<struct iovec> &iov)
     DataType *int_type = findDataType("INT");
 
     SuperBlock super;
-    BufDesp *bd = kBuffer.borrow(table_->name_.c_str(), 0);
+    BufDesp *bd, *bd2 = nullptr;
+    bd = kBuffer.borrow(table_->name_.c_str(), 0);
     super.attach(bd->buffer);
 
     std::stack<unsigned int> stk; // 存 blockid
     stk.push(super.getRoot());
     kBuffer.releaseBuf(bd); // 释放超块
-
-    unsigned int blockid;
+   
+    // preRet 用于存放本节点在父节点 slots 中的下标
+    // 本节点对应了最左边的指针时，first == false 表明父节点应使用 next 来索引
+    std::pair<bool, unsigned short> preRet;
+    unsigned short ret;
+    unsigned int blockid, parentId, nextId;
 
     // 用于检验记录是否已存在
     long long tmpKey;
@@ -828,31 +943,47 @@ int DataBlock::remove(std::vector<struct iovec> &iov)
     std::vector<struct iovec> tmp = {
         {&tmpKey, sizeof(long long)}, {&tmpVal, sizeof(unsigned int)}};
 
-    DataBlock data;
+    DataBlock data, parent;
     data.setTable(table_);
+    parent.setTable(table_);
     
     while (!stk.empty()) {
         blockid = stk.top();
         data.attachBuffer(&bd, blockid);
         Slot *slots = data.getSlotsPointer();
-        unsigned short ret =
-            data.searchRecord(iov[keyIdx].iov_base, iov[keyIdx].iov_len);
+        ret = data.searchRecord(iov[keyIdx].iov_base, iov[keyIdx].iov_len);
 
         if (data.getType() == BLOCK_TYPE_DATA) { // 叶节点
             stk.pop();                           // 准备向上回溯
             getRecord(data.buffer_, slots, ret, tmp);
 
-            // 检查记录是否已存在
-            if (memcmp(
-                    iov[keyIdx].iov_base,
-                    tmp[keyIdx].iov_base,
-                    iov[keyIdx].iov_len) == 0) {
+            // 记录不存在
+            if (!data.removeRecord(iov)) {
                 kBuffer.releaseBuf(bd);
                 return EFAULT;
             }
+            // 若为根节点则无需处理下溢
+            bd2 = kBuffer.borrow(table_->name_.c_str(), 0);
+            super.attach(bd2->buffer);
+            if (blockid == super.getRoot()) { 
+                kBuffer.releaseBuf(bd2);
+                kBuffer.releaseBuf(bd);
+                return S_OK;
+            }
+            kBuffer.releaseBuf(bd2);
 
+            // 删除后下溢
+            if (data.isUnderflow()) { 
+                parentId = stk.top();
+                parent.attachBuffer(&bd2, parentId);
+
+
+                kBuffer.releaseBuf(bd2);                
+            }
+            kBuffer.releaseBuf(bd);
         }
         
+        preRet.second = ret;       
     }
     return EFAULT;
 }

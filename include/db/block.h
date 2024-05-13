@@ -603,6 +603,10 @@ class DataBlock : public MetaBlock
 
     // 注意一定要与 releaseBuf 搭配
     inline void attachBuffer(struct BufDesp **bd, unsigned int blockid);
+    // 给定子节点对应的 slots 下标，尝试为其借键
+    // 失败则返回 false
+    // 传入需借键节点的 blockid 主要是减少重复代码
+    bool borrow(std::pair<bool, unsigned short> idx, unsigned int blockid);
 
     // len 为 keybuf 指向的 buffer 的长度
     // 需先将 keybuf 转换为网络字节序
