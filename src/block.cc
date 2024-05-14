@@ -902,7 +902,9 @@ bool DataBlock::borrow(std::pair<bool, unsigned short> idx, unsigned int blockid
         DataBlock child;
         child.setTable(table_);
         child.attachBuffer(&bd3, sibling.getNext());
-        getRecord(child.buffer_, child.getSlotsPointer(), 0, iov);
+
+        // 获得 child 第一条记录对应的键
+        getRecordByIndex(child.buffer_, child.getSlotsPointer(), 0, iov[0], 0);
         val = sibling.getNext(); // 此时 iov 即为要借出的键值对
         kBuffer.releaseBuf(bd3);       
         
@@ -996,14 +998,35 @@ bool DataBlock::merge(std::pair<bool, unsigned short> idx, unsigned int blockid)
 
 bool DataBlock::mergeBlock(unsigned int blockid)
 {
-    BufDesp *bd = nullptr;
+    RelationInfo *info = table_->info_;
+    unsigned int keyIdx = info->key;
+
+    BufDesp *bd = nullptr, *bd2 = nullptr;
     DataBlock data;
     data.setTable(table_);
     data.attachBuffer(&bd, blockid);
-    while (data.getSlots()) {
 
+    long long tmpKey;
+    unsigned int tmpVal;
+    std::vector<struct iovec> tmpIov = {
+        {&tmpKey, sizeof(long long)}, {&tmpVal, sizeof(unsigned int)}};
+
+    while (data.getSlots()) {
+        getRecord(data.buffer_, data.getSlotsPointer(), 0, tmpIov);
+        insertRecord(tmpIov);
+        data.removeRecord(tmpIov); // 为了可重用该 block
     }
 
+    // 移动 data 的最左指针
+    DataBlock child;
+    child.setTable(table_);
+    child.attachBuffer(&bd2, data.getNext());
+    getRecordByIndex(child.buffer_, child.getSlotsPointer(), 0, tmpIov[0], keyIdx);
+    tmpVal = data.getNext();
+    insertRecord(tmpIov);
+    data.setNext(NULL);
+
+    kBuffer.releaseBuf(bd2);
     kBuffer.releaseBuf(bd);
 }
 
@@ -1083,7 +1106,7 @@ int DataBlock::remove(std::vector<struct iovec> &iov)
 
 int DataBlock::update(std::vector<struct iovec> &iov) 
 {
-    return S_OK;
+    return EFAULT;
 }
 
 bool DataBlock::copyRecord(Record &record)

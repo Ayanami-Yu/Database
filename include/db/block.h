@@ -652,6 +652,20 @@ inline void getRecord(
     record.get(iov, &header);
 }
 
+// 将 slots[idx] 处记录的第 i 个字段赋给 iov
+inline void getRecordByIndex(
+    unsigned char* buffer,
+    Slot* slots,
+    unsigned short idx,
+    struct iovec &iov,
+    int i)
+{
+    Record record;
+    record.attach(
+        buffer + be16toh(slots[idx].offset), be16toh(slots[idx].length));
+    record.getByIndex((char *) iov.iov_base, (unsigned int *) &iov.iov_len, i);
+}
+
 inline bool operator==(
     const DataBlock::RecordIterator &x,
     const DataBlock::RecordIterator &y)
