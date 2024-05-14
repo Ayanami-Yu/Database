@@ -607,6 +607,10 @@ class DataBlock : public MetaBlock
     // 失败则返回 false
     // 传入需借键节点的 blockid 主要是减少重复代码
     bool borrow(std::pair<bool, unsigned short> idx, unsigned int blockid);
+    // blockid 为需借键节点
+    bool merge(std::pair<bool, unsigned short> idx, unsigned int blockid);
+    // 将 blockid 对应的 block 合并到本节点
+    bool mergeBlock(unsigned int blockid);
 
     // len 为 keybuf 指向的 buffer 的长度
     // 需先将 keybuf 转换为网络字节序

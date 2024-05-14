@@ -808,10 +808,10 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
 bool DataBlock::borrow(std::pair<bool, unsigned short> idx, unsigned int blockid)
 {
     bool ret = false;
-    unsigned short leFreesize = 0, riFreesize = 0;
-    Slot *slots = getSlotsPointer();
-    BufDesp *bd = nullptr, *bd2 = nullptr;
+    unsigned short leFreesize = USHRT_MAX, riFreesize = USHRT_MAX;
     unsigned int leftId = -1, rightId = -1, tmpLen = sizeof(unsigned int);
+    Slot *slots = getSlotsPointer();
+    BufDesp *bd = nullptr, *bd2 = nullptr, *bd3 = nullptr;   
     DataBlock data, sibling;
     data.setTable(table_);
     sibling.setTable(table_);
@@ -829,14 +829,20 @@ bool DataBlock::borrow(std::pair<bool, unsigned short> idx, unsigned int blockid
     std::vector<struct iovec> splitIov = {
         {&splitKey, sizeof(long long)}, {&splitVal, sizeof(unsigned int)}};
 
-    if (idx.first) {
+    // 用于借出最左键时记录原来从左往右第二个键值对
+    long long tmpKey;
+    unsigned int tmpVal;
+    std::vector<struct iovec> tmpIov = {
+        {&tmpKey, sizeof(long long)}, {&tmpVal, sizeof(unsigned int)}};
+
+    if (idx.first) { // 若 data 非最左节点
         DataBlock left;
         left.setTable(table_);
-        if (!idx.second) { // 从左往右数第二个子节点
+        if (!idx.second) { // 若 data 为从左往右数第二个子节点
             leftId = getNext();
             left.attachBuffer(&bd, leftId);
         } else {
-            // 当对应 slots 中下标不为0时，获取左边 block 的键数
+            // 当对应 slots 中下标不为0时
             Record record;
             record.attach(
                 buffer_ + be16toh(slots[idx.second - 1].offset),
@@ -862,7 +868,8 @@ bool DataBlock::borrow(std::pair<bool, unsigned short> idx, unsigned int blockid
     }
 
     // 因为子节点不为根，所以必然有兄弟节点
-    if (leFreesize >= riFreesize) {
+    // freesize 越小越可能借出键
+    if (leFreesize <= riFreesize) {
         sibling.attachBuffer(&bd, leftId);          
         getRecord( // 获取最右键
             sibling.buffer_,
@@ -890,11 +897,23 @@ bool DataBlock::borrow(std::pair<bool, unsigned short> idx, unsigned int blockid
         }
     } else {
         sibling.attachBuffer(&bd, rightId);
-        //getRecord( // 获取最左键
-            //sibling.buffer_, sibling.getSlotsPointer(), 0, iov);
-        sibling.removeRecord(iov);
+        
+        // 需要到 next 指向的子节点获取最左键
+        DataBlock child;
+        child.setTable(table_);
+        child.attachBuffer(&bd3, sibling.getNext());
+        getRecord(child.buffer_, child.getSlotsPointer(), 0, iov);
+        val = sibling.getNext(); // 此时 iov 即为要借出的键值对
+        kBuffer.releaseBuf(bd3);       
+        
+        // 修改 sibling 的 next 并重排其记录
+        getRecord(sibling.buffer_, sibling.getSlotsPointer(), 0, tmpIov);
+        sibling.setNext(*(unsigned int *) tmpIov[1].iov_base);
+        sibling.removeRecord(tmpIov);
+        
         if (sibling.isUnderflow()) { // 若借出键后会下溢
-            sibling.insertRecord(iov);
+            sibling.setNext(val);    // 将 next 重置为旧值
+            sibling.insertRecord(tmpIov);
             ret = false;
         } else {
             data.insertRecord(iov);
@@ -903,9 +922,8 @@ bool DataBlock::borrow(std::pair<bool, unsigned short> idx, unsigned int blockid
             getRecord(buffer_, getSlotsPointer(), idx.second + 1, splitIov);
             removeRecord(splitIov);
             splitKey =
-                *(long long *) iov[0].iov_base; // iov 此时的值为被移动的记录
-            splitVal = blockid;
-
+                *(long long *) tmpIov[0].iov_base;
+            splitVal = rightId; // 注意中位键对应的是右侧的 sibling
             insertRecord(splitIov);
             ret = true;
         }
@@ -913,6 +931,80 @@ bool DataBlock::borrow(std::pair<bool, unsigned short> idx, unsigned int blockid
     kBuffer.releaseBuf(bd);
     kBuffer.releaseBuf(bd2);
     return ret;
+}
+
+bool DataBlock::merge(std::pair<bool, unsigned short> idx, unsigned int blockid)
+{
+    bool ret = false;
+    unsigned short leFreesize = 0, riFreesize = 0;
+    unsigned int leftId = -1, rightId = -1, tmpLen = sizeof(unsigned int);
+    Slot *slots = getSlotsPointer();
+    BufDesp *bd = nullptr, *bd2;
+    DataBlock data, sibling;
+    data.setTable(table_);
+    sibling.setTable(table_);
+    data.attachBuffer(&bd2, blockid);
+
+    if (idx.first) {
+        DataBlock left;
+        left.setTable(table_);
+        if (!idx.second) { // 从左往右数第二个子节点
+            leftId = getNext();
+            left.attachBuffer(&bd, leftId);
+        } else {
+            Record record;
+            record.attach(
+                buffer_ + be16toh(slots[idx.second - 1].offset),
+                be16toh(slots[idx.second - 1].length));
+            record.getByIndex((char *) &leftId, &tmpLen, 1);
+            left.attachBuffer(&bd, leftId);
+        }
+        leFreesize = left.getFreeSize();
+        kBuffer.releaseBuf(bd);
+    }
+    if (idx.second < getSlots() - 1) { // 不为最右的子节点
+        Record record;
+        record.attach(
+            buffer_ + be16toh(slots[idx.second + 1].offset),
+            be16toh(slots[idx.second + 1].length));
+        record.getByIndex((char *) &rightId, &tmpLen, 1);
+
+        DataBlock right;
+        right.setTable(table_);
+        right.attachBuffer(&bd, rightId);
+        riFreesize = right.getFreeSize();
+        kBuffer.releaseBuf(bd);
+    }
+
+    // 选 freesize 更大的兄弟节点合并
+    if (leFreesize >= riFreesize) {
+        DataBlock left;
+        left.setTable(table_);
+        left.attachBuffer(&bd, leftId);       
+        if (left.mergeBlock(blockid)) ret = true; // 成功合并到 left
+    } else {
+        DataBlock right;
+        right.setTable(table_);
+        right.attachBuffer(&bd, rightId);
+        if (right.mergeBlock(blockid)) ret = true;
+    }
+
+    kBuffer.releaseBuf(bd);
+    kBuffer.releaseBuf(bd2);
+    return ret;
+}
+
+bool DataBlock::mergeBlock(unsigned int blockid)
+{
+    BufDesp *bd = nullptr;
+    DataBlock data;
+    data.setTable(table_);
+    data.attachBuffer(&bd, blockid);
+    while (data.getSlots()) {
+
+    }
+
+    kBuffer.releaseBuf(bd);
 }
 
 int DataBlock::remove(std::vector<struct iovec> &iov)
@@ -976,8 +1068,9 @@ int DataBlock::remove(std::vector<struct iovec> &iov)
             if (data.isUnderflow()) { 
                 parentId = stk.top();
                 parent.attachBuffer(&bd2, parentId);
+                if (!parent.borrow(preRet, data.getSelf())) { // 借键失败
 
-
+                }
                 kBuffer.releaseBuf(bd2);                
             }
             kBuffer.releaseBuf(bd);
