@@ -935,9 +935,8 @@ bool DataBlock::borrow(std::pair<bool, unsigned short> idx, unsigned int blockid
     return ret;
 }
 
-bool DataBlock::merge(std::pair<bool, unsigned short> idx, unsigned int blockid)
+void DataBlock::merge(std::pair<bool, unsigned short> idx, unsigned int blockid)
 {
-    bool ret = false;
     unsigned short leFreesize = 0, riFreesize = 0;
     unsigned int leftId = -1, rightId = -1, tmpLen = sizeof(unsigned int);
     Slot *slots = getSlotsPointer();
@@ -946,6 +945,11 @@ bool DataBlock::merge(std::pair<bool, unsigned short> idx, unsigned int blockid)
     data.setTable(table_);
     sibling.setTable(table_);
     data.attachBuffer(&bd2, blockid);
+
+    long long tmpKey;
+    unsigned int tmpVal;
+    std::vector<struct iovec> tmpIov = {
+        {&tmpKey, sizeof(long long)}, {&tmpVal, sizeof(unsigned int)}};
 
     if (idx.first) {
         DataBlock left;
@@ -979,24 +983,22 @@ bool DataBlock::merge(std::pair<bool, unsigned short> idx, unsigned int blockid)
     }
 
     // 选 freesize 更大的兄弟节点合并
-    if (leFreesize >= riFreesize) {
-        DataBlock left;
-        left.setTable(table_);
-        left.attachBuffer(&bd, leftId);       
-        if (left.mergeBlock(blockid)) ret = true; // 成功合并到 left
+    sibling.attachBuffer(&bd, leFreesize >= riFreesize ? leftId : rightId);
+    sibling.mergeBlock(blockid);
+    if (idx.first) {
+        getRecord(buffer_, getSlotsPointer(), idx.second, tmpIov);
+        removeRecord(tmpIov);
     } else {
-        DataBlock right;
-        right.setTable(table_);
-        right.attachBuffer(&bd, rightId);
-        if (right.mergeBlock(blockid)) ret = true;
+        // data 为最左指针指向的 block，则必然是与右兄弟合并
+        getRecord(buffer_, getSlotsPointer(), 0, tmpIov);
+        setNext(*(unsigned int *) tmpIov[1].iov_base);
+        removeRecord(tmpIov);
     }
-
     kBuffer.releaseBuf(bd);
     kBuffer.releaseBuf(bd2);
-    return ret;
 }
 
-bool DataBlock::mergeBlock(unsigned int blockid)
+void DataBlock::mergeBlock(unsigned int blockid)
 {
     RelationInfo *info = table_->info_;
     unsigned int keyIdx = info->key;
@@ -1011,11 +1013,23 @@ bool DataBlock::mergeBlock(unsigned int blockid)
     std::vector<struct iovec> tmpIov = {
         {&tmpKey, sizeof(long long)}, {&tmpVal, sizeof(unsigned int)}};
 
-    while (data.getSlots()) {
-        getRecord(data.buffer_, data.getSlotsPointer(), 0, tmpIov);
-        insertRecord(tmpIov);
-        data.removeRecord(tmpIov); // 为了可重用该 block
-    }
+    if (data.getType() == BLOCK_TYPE_INDEX) {
+        // 本实验假设内节点记录为定长
+        // 因此为了效率，使用不需要从根开始搜的 insertRecord
+        while (data.getSlots()) {
+            getRecord(data.buffer_, data.getSlotsPointer(), 0, tmpIov);
+            insertRecord(tmpIov);
+            data.removeRecord(tmpIov); // 为了可重用该 block
+        }
+    } else {
+        // 当合并到叶节点时，因为可能为变长记录，
+        // 所以需要使用会处理分裂的 insert 而非 insertRecord
+        while (data.getSlots()) {
+            getRecord(data.buffer_, data.getSlotsPointer(), 0, tmpIov);
+            insert(tmpIov);
+            data.removeRecord(tmpIov); // 为了可重用该 block
+        }
+    }   
 
     // 移动 data 的最左指针
     DataBlock child;
@@ -1023,7 +1037,10 @@ bool DataBlock::mergeBlock(unsigned int blockid)
     child.attachBuffer(&bd2, data.getNext());
     getRecordByIndex(child.buffer_, child.getSlotsPointer(), 0, tmpIov[0], keyIdx);
     tmpVal = data.getNext();
-    insertRecord(tmpIov);
+    if (data.getType() == BLOCK_TYPE_INDEX)
+        insertRecord(tmpIov);
+    else
+        insert(tmpIov);
     data.setNext(NULL);
 
     kBuffer.releaseBuf(bd2);
@@ -1042,8 +1059,9 @@ int DataBlock::remove(std::vector<struct iovec> &iov)
     bd = kBuffer.borrow(table_->name_.c_str(), 0);
     super.attach(bd->buffer);
 
-    std::stack<unsigned int> stk; // 存 blockid
-    stk.push(super.getRoot());
+    // 存 blockid 及 
+    std::stack<std::pair<unsigned int, unsigned short>> stk;
+    stk.push({super.getRoot(), NULL});
     kBuffer.releaseBuf(bd); // 释放超块
    
     // preRet 用于存放本节点在父节点 slots 中的下标
@@ -1063,7 +1081,7 @@ int DataBlock::remove(std::vector<struct iovec> &iov)
     parent.setTable(table_);
     
     while (!stk.empty()) {
-        blockid = stk.top();
+        blockid = stk.top().first;
         data.attachBuffer(&bd, blockid);
         Slot *slots = data.getSlotsPointer();
         ret = data.searchRecord(iov[keyIdx].iov_base, iov[keyIdx].iov_len);
@@ -1089,14 +1107,41 @@ int DataBlock::remove(std::vector<struct iovec> &iov)
 
             // 删除后下溢
             if (data.isUnderflow()) { 
-                parentId = stk.top();
+                parentId = stk.top().first;
                 parent.attachBuffer(&bd2, parentId);
                 if (!parent.borrow(preRet, data.getSelf())) { // 借键失败
-
+                    parent.merge(preRet, data.getSelf());
                 }
                 kBuffer.releaseBuf(bd2);                
             }
             kBuffer.releaseBuf(bd);
+
+            while (!stk.empty()) { // 向上回溯
+                blockid = stk.top().first;
+                stk.pop();
+
+                data.attachBuffer(&bd, blockid);
+                if (data.isUnderflow()) {
+                    if (!stk.empty()) { // 不是根节点
+                        parentId = stk.top().first;
+                        parent.attachBuffer(&bd2, parentId);
+                        if (!parent.borrow(
+                                preRet, data.getSelf())) { // 借键失败
+                            parent.merge(preRet, data.getSelf());
+                        }
+                        kBuffer.releaseBuf(bd2);                       
+                    } else {
+                        kBuffer.releaseBuf(bd);
+                        return S_OK;
+                    }
+                }
+
+                kBuffer.releaseBuf(bd);
+            }
+
+            return S_OK;
+        } else { // BLOCK_TYPE_INDEX
+            
         }
         
         preRet.second = ret;       
