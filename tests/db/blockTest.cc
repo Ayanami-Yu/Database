@@ -1223,8 +1223,6 @@ TEST_CASE("IndexTest", "[p2]")
                 bigint, int_type, keys[i], &keys[i], vals[i], &vals[i], iov);
             REQUIRE(data.insert(iov) == S_OK);
         }
-
-        printf("key size = %zd\n", keys.size());
         
         // 检查插入
         for (int i = 0; i < keys.size(); ++i) {
@@ -1237,6 +1235,46 @@ TEST_CASE("IndexTest", "[p2]")
 
     SECTION("remove")
     {
+        Table table;
+        REQUIRE(table.open("table") == S_OK);
 
+        DataType *bigint = findDataType("BIGINT");
+        DataType *int_type = findDataType("INT");
+        std::vector<struct iovec> iov(2);
+
+        DataBlock data;
+        BufDesp *bd = nullptr;
+        data.setTable(&table);
+        data.attachBuffer(&bd, 1);
+
+        // 先初始化 iov 为任意值
+        long long tmpKey;
+        unsigned int tmpVal;
+        setIdxIov(bigint, int_type, -1, &tmpKey, -1, &tmpVal, iov);
+
+        // 上一 SECTION 中的键
+        std::vector<long long> preKeys = {1, 8, 12, 15, 22, 30, 33, 44, 46, 48};
+        for (int i = 50; i < 2051; i += 2)
+            preKeys.push_back(i);
+
+        // 检查现有B+树
+        for (int i = 0; i < preKeys.size(); ++i) {
+            bigint->htobe(&preKeys[i]);
+            REQUIRE(data.search(&preKeys[i], sizeof(long long), iov) == S_OK);
+        }
+
+        // 检查删除
+        for (int i = 0; i < 7; ++i) {
+            tmpKey = preKeys[i];
+            tmpVal = (unsigned int) preKeys[i] * 10;
+            REQUIRE(data.remove(iov, false) == S_OK);
+        }
+
+        // Debug
+        tmpKey = preKeys[8];
+        tmpVal = (unsigned int) preKeys[8] * 10;
+        REQUIRE(data.remove(iov, true) == S_OK);
+
+        kBuffer.releaseBuf(bd);
     }
 }

@@ -1047,7 +1047,7 @@ void DataBlock::mergeBlock(unsigned int blockid)
     kBuffer.releaseBuf(bd);
 }
 
-int DataBlock::remove(std::vector<struct iovec> &iov)
+int DataBlock::remove(std::vector<struct iovec> &iov, bool breakpoint)
 {
     RelationInfo *info = table_->info_;
     unsigned int keyIdx = info->key;
@@ -1069,7 +1069,7 @@ int DataBlock::remove(std::vector<struct iovec> &iov)
     // 本节点对应了最左边的指针时，first == false 表明父节点应使用 next 来索引
     std::pair<bool, unsigned short> preRet;
     unsigned short ret;
-    unsigned int parentId, nextId;
+    unsigned int parentId;
 
     // 用于在向下定位时暂存内节点搜到的记录
     long long tmpKey;
