@@ -784,7 +784,7 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
                 // 若相等则为键的右侧指针，否则为左侧
                 if (memcmp(tmp[keyIdx].iov_base, iov[keyIdx].iov_base, iov[keyIdx].iov_len) == 0) {
                     int_type->betoh(tmp[1].iov_base);
-                    unsigned int pushId = *(unsigned int *) tmp[1].iov_base;
+                    // unsigned int pushId = *(unsigned int *) tmp[1].iov_base;
 
                     stk.push(*(unsigned int *) tmp[1].iov_base);
                 } else if (ret > 0) {
@@ -1059,18 +1059,19 @@ int DataBlock::remove(std::vector<struct iovec> &iov)
     bd = kBuffer.borrow(table_->name_.c_str(), 0);
     super.attach(bd->buffer);
 
-    // 存 blockid 及 
+    // 存 blockid 及在父节点中的下标
     std::stack<std::pair<unsigned int, unsigned short>> stk;
-    stk.push({super.getRoot(), NULL});
+    std::pair<unsigned int, unsigned short> blockInfo;
+    stk.push({super.getRoot(), -1});
     kBuffer.releaseBuf(bd); // 释放超块
    
     // preRet 用于存放本节点在父节点 slots 中的下标
     // 本节点对应了最左边的指针时，first == false 表明父节点应使用 next 来索引
     std::pair<bool, unsigned short> preRet;
     unsigned short ret;
-    unsigned int blockid, parentId, nextId;
+    unsigned int parentId, nextId;
 
-    // 用于检验记录是否已存在
+    // 用于在向下定位时暂存内节点搜到的记录
     long long tmpKey;
     unsigned int tmpVal;
     std::vector<struct iovec> tmp = {
@@ -1081,24 +1082,25 @@ int DataBlock::remove(std::vector<struct iovec> &iov)
     parent.setTable(table_);
     
     while (!stk.empty()) {
-        blockid = stk.top().first;
-        data.attachBuffer(&bd, blockid);
+        blockInfo = stk.top();
+        preRet = {
+            blockInfo.second == -1 ? false : true, blockInfo.second};
+
+        data.attachBuffer(&bd, blockInfo.first);
         Slot *slots = data.getSlotsPointer();
         ret = data.searchRecord(iov[keyIdx].iov_base, iov[keyIdx].iov_len);
 
         if (data.getType() == BLOCK_TYPE_DATA) { // 叶节点
-            stk.pop();                           // 准备向上回溯
-            getRecord(data.buffer_, slots, ret, tmp);
+            stk.pop();                           // 准备向上回溯   
 
-            // 记录不存在
-            if (!data.removeRecord(iov)) {
+            if (!data.removeRecord(iov)) { // 记录不存在
                 kBuffer.releaseBuf(bd);
                 return EFAULT;
             }
             // 若为根节点则无需处理下溢
             bd2 = kBuffer.borrow(table_->name_.c_str(), 0);
             super.attach(bd2->buffer);
-            if (blockid == super.getRoot()) { 
+            if (blockInfo.first == super.getRoot()) { 
                 kBuffer.releaseBuf(bd2);
                 kBuffer.releaseBuf(bd);
                 return S_OK;
@@ -1117,34 +1119,69 @@ int DataBlock::remove(std::vector<struct iovec> &iov)
             kBuffer.releaseBuf(bd);
 
             while (!stk.empty()) { // 向上回溯
-                blockid = stk.top().first;
+                blockInfo = stk.top();
                 stk.pop();
+                preRet = {
+                    blockInfo.second == -1 ? false : true, blockInfo.second};
 
-                data.attachBuffer(&bd, blockid);
+                data.attachBuffer(&bd, blockInfo.first);
                 if (data.isUnderflow()) {
                     if (!stk.empty()) { // 不是根节点
                         parentId = stk.top().first;
                         parent.attachBuffer(&bd2, parentId);
                         if (!parent.borrow(
                                 preRet, data.getSelf())) { // 借键失败
+                            // 无需调用 merge 后检查 parent 是否下溢，
+                            // 因为下一轮会对其检查
                             parent.merge(preRet, data.getSelf());
                         }
                         kBuffer.releaseBuf(bd2);                       
                     } else {
+                        // 根节点下溢分两种情况：
+                        // 只剩一个指针时，将根节点删除，并将根设为原来的唯一子节点
+                        // 否则，根节点需保留
+                        if (!data.getSlots()) {
+                            bd2 = kBuffer.borrow(table_->name_.c_str(), 0);
+                            super.attach(bd2->buffer);
+                            super.setRoot(data.getNext());
+                            data.setNext(NULL);
+                            kBuffer.releaseBuf(bd2);
+                        }
                         kBuffer.releaseBuf(bd);
                         return S_OK;
                     }
                 }
-
                 kBuffer.releaseBuf(bd);
             }
-
             return S_OK;
         } else { // BLOCK_TYPE_INDEX
-            
-        }
-        
-        preRet.second = ret;       
+            if (ret >= data.getSlots()) {
+                getRecord(data.buffer_, slots, data.getSlots() - 1, tmp);
+                int_type->betoh(tmp[1].iov_base);
+                stk.push(
+                    {*(unsigned int *) tmp[1].iov_base, data.getSlots() - 1});
+            } else {
+                getRecord(data.buffer_, slots, ret, tmp);
+                
+                // 若相等则为键的右侧指针，否则为左侧
+                if (memcmp(
+                        tmp[keyIdx].iov_base,
+                        iov[keyIdx].iov_base,
+                        iov[keyIdx].iov_len) == 0) {
+                    int_type->betoh(tmp[1].iov_base);
+
+                    stk.push({*(unsigned int *) tmp[1].iov_base, ret});
+                } else if (ret > 0) {
+                    getRecord(data.buffer_, slots, ret - 1, tmp);
+                    int_type->betoh(tmp[1].iov_base);
+
+                    stk.push({*(unsigned int *) tmp[1].iov_base, ret - 1});
+                } else {
+                    stk.push({data.getNext(), -1}); // 最左指针对应下标为 -1
+                }
+            }
+            kBuffer.releaseBuf(bd);
+        }     
     }
     return EFAULT;
 }
