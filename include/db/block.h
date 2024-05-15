@@ -620,7 +620,7 @@ class DataBlock : public MetaBlock
     int search(void *keybuf, unsigned int len, std::vector<struct iovec> &iov);
     // iov[0] 应给出所要删除的键及其长度
     int insert(std::vector<struct iovec> &iov); 
-    int remove(std::vector<struct iovec> &iov, bool breakpoint);  
+    int remove(std::vector<struct iovec> &iov, bool debug);  
     int update(std::vector<struct iovec> &iov);    
 
     // 分裂块位置
