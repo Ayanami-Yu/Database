@@ -599,25 +599,38 @@ class DataBlock : public MetaBlock
     // true 表示接下来应插到旧 block
     std::pair<unsigned int, bool> 
         split(unsigned short insertPos, std::vector<struct iovec> &iov);
-    inline bool isUnderflow() { return getFreeSize() < DATA_FREESIZE / 2; }
+    inline bool isUnderflow() { return getFreeSize() > DATA_FREESIZE / 2; }
 
     // 注意一定要与 releaseBuf 搭配
     inline void attachBuffer(struct BufDesp **bd, unsigned int blockid);
     // 给定子节点对应的 slots 下标，尝试为其借键
     // 当 idx == -1 (65535) 时对应最左指针
     // 当兄弟为叶节点时，需要 dataIov 来确定记录结构
+    // 注意调用后 dataIov 的值不确定
     // 失败则返回 false
     // 传入需借键节点的 blockid 主要是减少重复代码
+    // 使用 int 而非 unsigned short，
+    // 因为这样更容易通过 -1 来处理最左指针
     bool borrow(
-        unsigned short idx,
+        int idx,
         unsigned int blockid,
         std::vector<struct iovec> &dataIov);
     // blockid 为需借键节点
     // 在父节点上调用该函数，且会删去子节点对应的键
     // 子节点合并后，本节点可能下溢，需在调用 merge 后判断
-    void merge(unsigned short idx, unsigned int blockid);
+    void merge(
+        int idx,
+        unsigned int blockid,
+        std::vector<struct iovec> &dataIov);
     // 将 blockid 对应的 block 合并到本节点
-    void mergeBlock(unsigned int blockid);
+    // blockIdx 为 block 在父节点中对应的下标
+    // 会删去父节点中 block 对应的记录，
+    // 但不会设置 block 的 next
+    void mergeBlock(
+        unsigned int blockid,
+        unsigned int parentId,
+        int blockIdx,
+        std::vector<struct iovec> &dataIov);
 
     // len 为 keybuf 指向的 buffer 的长度
     // 需先将 keybuf 转换为网络字节序

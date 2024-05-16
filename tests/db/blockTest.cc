@@ -1271,7 +1271,8 @@ TEST_CASE("IndexTest", "[p2]")
             REQUIRE(data.remove(iov, false) == S_OK);
         }
 
-        // Debug 7 first borrow merge
+        // Debug key = 44
+        // printf("10\n");
         tmpKey = preKeys[7];
         tmpVal = (unsigned int) preKeys[7] * 10;
         REQUIRE(data.remove(iov, true) == S_OK);
