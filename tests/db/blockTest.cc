@@ -1264,16 +1264,16 @@ TEST_CASE("IndexTest", "[p2]")
         }
 
         // 检查删除
-        for (int i = 0; i < 8; ++i) {
+        for (int i = 0; i < 7; ++i) {
             printf("%d\n", i);
             tmpKey = preKeys[i];
             tmpVal = (unsigned int) preKeys[i] * 10;
             REQUIRE(data.remove(iov, false) == S_OK);
         }
 
-        // Debug
-        tmpKey = preKeys[8];
-        tmpVal = (unsigned int) preKeys[8] * 10;
+        // Debug 7 first borrow merge
+        tmpKey = preKeys[7];
+        tmpVal = (unsigned int) preKeys[7] * 10;
         REQUIRE(data.remove(iov, true) == S_OK);
 
         kBuffer.releaseBuf(bd);

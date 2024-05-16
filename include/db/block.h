@@ -604,13 +604,18 @@ class DataBlock : public MetaBlock
     // 注意一定要与 releaseBuf 搭配
     inline void attachBuffer(struct BufDesp **bd, unsigned int blockid);
     // 给定子节点对应的 slots 下标，尝试为其借键
+    // 当 idx == -1 (65535) 时对应最左指针
+    // 当兄弟为叶节点时，需要 dataIov 来确定记录结构
     // 失败则返回 false
     // 传入需借键节点的 blockid 主要是减少重复代码
-    bool borrow(std::pair<bool, unsigned short> idx, unsigned int blockid);
+    bool borrow(
+        unsigned short idx,
+        unsigned int blockid,
+        std::vector<struct iovec> &dataIov);
     // blockid 为需借键节点
     // 在父节点上调用该函数，且会删去子节点对应的键
     // 子节点合并后，本节点可能下溢，需在调用 merge 后判断
-    void merge(std::pair<bool, unsigned short> idx, unsigned int blockid);
+    void merge(unsigned short idx, unsigned int blockid);
     // 将 blockid 对应的 block 合并到本节点
     void mergeBlock(unsigned int blockid);
 

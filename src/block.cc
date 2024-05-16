@@ -536,25 +536,10 @@ int DataBlock::search(
                 return EFAULT;
             } 
             DataType *bigint = findDataType("BIGINT");
-            // bigint->betoh(iov[keyIdx].iov_base);
-            // long long debug = *(long long *) iov[keyIdx].iov_base;
-            // bigint->htobe(iov[keyIdx].iov_base);
-
             getRecord(data.buffer_, slots, ret, iov);
-
-            // bigint->betoh(iov[keyIdx].iov_base);
-            // long long debug3 = *(long long *) iov[keyIdx].iov_base;
-            // bigint->htobe(iov[keyIdx].iov_base);
 
             // ret == 0 时仍可能记录不存在
             if (memcmp(keybuf, iov[keyIdx].iov_base, iov[keyIdx].iov_len) != 0) {                
-                // bigint->betoh(keybuf);
-                // bigint->betoh(iov[keyIdx].iov_base);
-                // long long debug1 = *(long long *) keybuf,
-                          // debug2 = *(long long *) iov[keyIdx].iov_base;
-                // bigint->htobe(keybuf);
-                // bigint->htobe(iov[keyIdx].iov_base);
-
                 kBuffer.releaseBuf(bd);
                 return EFAULT;
             } else {
@@ -562,11 +547,10 @@ int DataBlock::search(
                 return S_OK;
             }
         } else { // BLOCK_TYPE_INDEX
-            // unsigned short debugSlots = data.getSlots();
-
             if (ret >= data.getSlots()) { 
                 getRecord(data.buffer_, slots, data.getSlots() - 1, tmp);
                 int_type->betoh(tmp[1].iov_base);
+
                 stk.push(*(unsigned int *) tmp[1].iov_base);
             } else {
                 getRecord(data.buffer_, slots, ret, tmp);
@@ -578,6 +562,7 @@ int DataBlock::search(
                 } else if (ret > 0) {
                     getRecord(data.buffer_, slots, ret - 1, tmp);
                     int_type->betoh(tmp[1].iov_base);
+
                     stk.push(*(unsigned int *) tmp[1].iov_base);
                 } else {
                     stk.push(data.getNext()); // 最左侧指针
@@ -634,9 +619,6 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
     parent.setTable(table_);
     root.setTable(table_);
 
-    // keyType->betoh(iov[keyIdx].iov_base);
-    // long long debugKey = *(long long *) iov[0].iov_base;
-    // keyType->htobe(iov[keyIdx].iov_base);
     while (!stk.empty()) {
         blockid = stk.top();
         data.attachBuffer(&bd, blockid);
@@ -658,10 +640,8 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
                 next.attachBuffer(&bd2, splitRet.first);
                 next.setType(BLOCK_TYPE_DATA);
 
-                // std::pair<bool, unsigned short> debugRet;
                 if (splitRet.second) data.insertRecord(iov);
                 else next.insertRecord(iov);
-                // else debugRet = next.insertRecord(iov);
 
                 // 获取新 block 的最小键
                 Slot *nextSlots = next.getSlotsPointer();
@@ -775,7 +755,6 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
             if (ret >= data.getSlots()) {
                 getRecord(data.buffer_, slots, data.getSlots() - 1, tmp);
                 int_type->betoh(tmp[1].iov_base);
-                // unsigned int debugId = *(unsigned int *) tmp[1].iov_base;
 
                 stk.push(*(unsigned int *) tmp[1].iov_base);               
             } else {
@@ -784,18 +763,13 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
                 // 若相等则为键的右侧指针，否则为左侧
                 if (memcmp(tmp[keyIdx].iov_base, iov[keyIdx].iov_base, iov[keyIdx].iov_len) == 0) {
                     int_type->betoh(tmp[1].iov_base);
-                    // unsigned int pushId = *(unsigned int *) tmp[1].iov_base;
-
                     stk.push(*(unsigned int *) tmp[1].iov_base);
                 } else if (ret > 0) {
                     getRecord(data.buffer_, slots, ret - 1, tmp);
                     int_type->betoh(tmp[1].iov_base);
-                    // unsigned int debugId = *(unsigned int *) tmp[1].iov_base;
 
                     stk.push(*(unsigned int *) tmp[1].iov_base);
                 } else {
-                    // unsigned int debugId = data.getNext();
-
                     stk.push(data.getNext()); // 最左侧指针
                 }
             }
@@ -805,12 +779,20 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
     return EFAULT;
 }
 
-bool DataBlock::borrow(std::pair<bool, unsigned short> idx, unsigned int blockid)
+bool DataBlock::borrow(
+    unsigned short idx,
+    unsigned int blockid,
+    std::vector<struct iovec> &dataIov)
 {
+    printf("borrow\n");
+
     bool ret = false;
     unsigned short leFreesize = USHRT_MAX, riFreesize = USHRT_MAX;
     unsigned int leftId = -1, rightId = -1, tmpLen = sizeof(unsigned int);
     
+    RelationInfo *info = table_->info_;
+    unsigned int keyIdx = info->key;
+
     BufDesp *bd = nullptr, *bd2 = nullptr, *bd3 = nullptr;   
     Slot *slots = getSlotsPointer();
     DataType *intType = findDataType("INT");
@@ -838,18 +820,18 @@ bool DataBlock::borrow(std::pair<bool, unsigned short> idx, unsigned int blockid
     std::vector<struct iovec> tmpIov = {
         {&tmpKey, sizeof(long long)}, {&tmpVal, sizeof(unsigned int)}};
 
-    if (idx.first) { // 若 data 非最左节点
+    if (idx != -1) { // 若 data 非最左节点
         DataBlock left;
         left.setTable(table_);
-        if (!idx.second) { // 若 data 为从左往右数第二个子节点
+        if (!idx) { // 若 data 为从左往右数第二个子节点
             leftId = getNext();
             left.attachBuffer(&bd, leftId);
         } else {
             // 当对应 slots 中下标不为0时
             Record record;
             record.attach(
-                buffer_ + be16toh(slots[idx.second - 1].offset),
-                be16toh(slots[idx.second - 1].length));
+                buffer_ + be16toh(slots[idx - 1].offset),
+                be16toh(slots[idx - 1].length));
             record.getByIndex((char *) &leftId, &tmpLen, 1);
 
             intType->betoh(&leftId);
@@ -858,11 +840,11 @@ bool DataBlock::borrow(std::pair<bool, unsigned short> idx, unsigned int blockid
         leFreesize = left.getFreeSize();
         kBuffer.releaseBuf(bd);
     }
-    if (idx.second < getSlots() - 1) { // 不为最右的子节点
+    if (idx < getSlots() - 1) { // 不为最右的子节点
         Record record;
         record.attach(
-            buffer_ + be16toh(slots[idx.second + 1].offset),
-            be16toh(slots[idx.second + 1].length));       
+            buffer_ + be16toh(slots[idx + 1].offset),
+            be16toh(slots[idx + 1].length));       
         record.getByIndex((char *) &rightId, &tmpLen, 1);
         intType->betoh(&rightId); // 保持 leftId 及 rightId 均为主机序
 
@@ -890,7 +872,7 @@ bool DataBlock::borrow(std::pair<bool, unsigned short> idx, unsigned int blockid
             data.insertRecord(iov);
 
             // 修改两个子节点对应的中位键
-            getRecord(buffer_, getSlotsPointer(), idx.second, splitIov);
+            getRecord(buffer_, getSlotsPointer(), idx, splitIov);
             removeRecord(splitIov);
             splitKey = *(long long *) iov[0].iov_base; // iov 此时的值为被移动的记录
             splitVal = blockid;
@@ -905,51 +887,75 @@ bool DataBlock::borrow(std::pair<bool, unsigned short> idx, unsigned int blockid
     } else {
         sibling.attachBuffer(&bd, rightId);
         
-        // 需要到 next 指向的子节点获取最左键
-        DataBlock child;
-        child.setTable(table_);
-        child.attachBuffer(&bd3, sibling.getNext());
+        // 兄弟为叶节点时，next 指向下一叶节点而非最左指针
+        if (sibling.getType() == BLOCK_TYPE_DATA) {
+            getRecord(sibling.buffer_, sibling.getSlotsPointer(), 0, dataIov);
+            sibling.removeRecord(dataIov);
 
-        // 获得 child 第一条记录对应的键
-        getRecordByIndex(child.buffer_, child.getSlotsPointer(), 0, iov[0], 0);
-        val = sibling.getNext(); // 此时 iov 即为要借出的键值对
-        intType->htobe(&val);    // 保持 iov 都为网络字节序
-        kBuffer.releaseBuf(bd3);       
-        
-        // 修改 sibling 的 next 并重排其记录
-        getRecord(sibling.buffer_, sibling.getSlotsPointer(), 0, tmpIov);
-        intType->betoh(tmpIov[1].iov_base);
-        sibling.setNext(*(unsigned int *) tmpIov[1].iov_base);
-        intType->htobe(tmpIov[1].iov_base);
-        sibling.removeRecord(tmpIov);
-        
-        if (sibling.isUnderflow()) { // 若借出键后会下溢
-            intType->betoh(&val);
-            sibling.setNext(val);    // 将 next 重置为旧值
-            intType->htobe(&val);
-            sibling.insertRecord(tmpIov);
-            ret = false;
-        } else {
-            data.insertRecord(iov);
+            if (sibling.isUnderflow()) {
+                sibling.insertRecord(dataIov);
+                ret = false;
+            } else {
+                data.insertRecord(dataIov);
 
-            // 修改两个子节点对应的中位键
-            getRecord(buffer_, getSlotsPointer(), idx.second + 1, splitIov);
-            removeRecord(splitIov);
-            splitKey =
-                *(long long *) tmpIov[0].iov_base;
-            splitVal = rightId; // 注意中位键对应的是右侧的 sibling
-            intType->htobe(&rightId);
-            insertRecord(splitIov);
-            ret = true;
-        }
+                // 修改两个子节点对应的中位键
+                getRecord(buffer_, getSlotsPointer(), idx + 1, splitIov);
+                removeRecord(splitIov);
+                splitKey = *(long long *) dataIov[keyIdx].iov_base;
+                splitVal = rightId;
+                intType->htobe(&rightId);
+                insertRecord(splitIov);                
+                ret = true;
+            }            
+        } else { // BLOCK_TYPE_INDEX
+            // 需要到 next 指向的子节点获取最左键
+            DataBlock child;
+            child.setTable(table_);
+            child.attachBuffer(&bd3, sibling.getNext());
+
+            // 获得 child 第一条记录对应的键
+            getRecordByIndex(
+                child.buffer_, child.getSlotsPointer(), 0, iov[0], 0);
+            val = sibling.getNext(); // 此时 iov 即为要借出的键值对
+            intType->htobe(&val);    // 保持 iov 都为网络字节序
+            kBuffer.releaseBuf(bd3);
+
+            // 修改 sibling 的 next 并重排其记录
+            getRecord(sibling.buffer_, sibling.getSlotsPointer(), 0, tmpIov);
+            intType->betoh(tmpIov[1].iov_base);
+            sibling.setNext(*(unsigned int *) tmpIov[1].iov_base);
+            intType->htobe(tmpIov[1].iov_base);
+            sibling.removeRecord(tmpIov);
+
+            if (sibling.isUnderflow()) { // 若借出键后会下溢
+                intType->betoh(&val);
+                sibling.setNext(val); // 将 next 重置为旧值
+                intType->htobe(&val);
+                sibling.insertRecord(tmpIov);
+                ret = false;
+            } else {
+                data.insertRecord(iov);
+
+                // 修改两个子节点对应的中位键
+                getRecord(buffer_, getSlotsPointer(), idx + 1, splitIov);
+                removeRecord(splitIov);
+                splitKey = *(long long *) tmpIov[0].iov_base;
+                splitVal = rightId; // 注意中位键对应的是右侧的 sibling
+                intType->htobe(&rightId);
+                insertRecord(splitIov);
+                ret = true;
+            }
+        }      
     }       
     kBuffer.releaseBuf(bd);
     kBuffer.releaseBuf(bd2);
     return ret;
 }
 
-void DataBlock::merge(std::pair<bool, unsigned short> idx, unsigned int blockid)
+void DataBlock::merge(unsigned short idx, unsigned int blockid)
 {
+    printf("merge\n");
+
     unsigned short leFreesize = 0, riFreesize = 0;
     unsigned int leftId = -1, rightId = -1, tmpLen = sizeof(unsigned int);   
     BufDesp *bd = nullptr, *bd2;
@@ -966,17 +972,17 @@ void DataBlock::merge(std::pair<bool, unsigned short> idx, unsigned int blockid)
     std::vector<struct iovec> tmpIov = {
         {&tmpKey, sizeof(long long)}, {&tmpVal, sizeof(unsigned int)}};
 
-    if (idx.first) {
+    if (idx != -1) {
         DataBlock left;
         left.setTable(table_);
-        if (!idx.second) { // 从左往右数第二个子节点
+        if (!idx) { // 从左往右数第二个子节点
             leftId = getNext();
             left.attachBuffer(&bd, leftId);
         } else {
             Record record;
             record.attach(
-                buffer_ + be16toh(slots[idx.second - 1].offset),
-                be16toh(slots[idx.second - 1].length));
+                buffer_ + be16toh(slots[idx - 1].offset),
+                be16toh(slots[idx - 1].length));
             record.getByIndex((char *) &leftId, &tmpLen, 1);
 
             intType->betoh(&leftId); // 保持 blockid 均为主机序
@@ -985,11 +991,11 @@ void DataBlock::merge(std::pair<bool, unsigned short> idx, unsigned int blockid)
         leFreesize = left.getFreeSize();
         kBuffer.releaseBuf(bd);
     }
-    if (idx.second < getSlots() - 1) { // 不为最右的子节点
+    if (idx < getSlots() - 1) { // 不为最右的子节点
         Record record;
         record.attach(
-            buffer_ + be16toh(slots[idx.second + 1].offset),
-            be16toh(slots[idx.second + 1].length));
+            buffer_ + be16toh(slots[idx + 1].offset),
+            be16toh(slots[idx + 1].length));
         record.getByIndex((char *) &rightId, &tmpLen, 1);
         intType->betoh(&rightId);
 
@@ -1003,8 +1009,8 @@ void DataBlock::merge(std::pair<bool, unsigned short> idx, unsigned int blockid)
     // 选 freesize 更大的兄弟节点合并
     sibling.attachBuffer(&bd, leFreesize >= riFreesize ? leftId : rightId);
     sibling.mergeBlock(blockid);
-    if (idx.first) {
-        getRecord(buffer_, getSlotsPointer(), idx.second, tmpIov);
+    if (idx != -1) {
+        getRecord(buffer_, getSlotsPointer(), idx, tmpIov);
         removeRecord(tmpIov);
     } else {
         // data 为最左指针指向的 block，则必然是与右兄弟合并
@@ -1089,9 +1095,8 @@ int DataBlock::remove(std::vector<struct iovec> &iov, bool debug)
     kBuffer.releaseBuf(bd); // 释放超块
    
     // preRet 用于存放本节点在父节点 slots 中的下标
-    // 本节点对应了最左边的指针时，first == false 表明父节点应使用 next 来索引
-    std::pair<bool, unsigned short> preRet;
-    unsigned short ret;
+    // 本节点对应了最左边的指针时，preRet == -1 表明父节点应使用 next 来索引
+    unsigned short ret, preRet;
     unsigned int parentId;
 
     // 用于在向下定位时暂存内节点搜到的记录
@@ -1106,8 +1111,7 @@ int DataBlock::remove(std::vector<struct iovec> &iov, bool debug)
     
     while (!stk.empty()) {
         blockInfo = stk.top();
-        preRet = {
-            blockInfo.second == -1 ? false : true, blockInfo.second};
+        preRet = blockInfo.second;
 
         data.attachBuffer(&bd, blockInfo.first);
         Slot *slots = data.getSlotsPointer();
@@ -1144,8 +1148,7 @@ int DataBlock::remove(std::vector<struct iovec> &iov, bool debug)
             while (!stk.empty()) { // 向上回溯
                 blockInfo = stk.top();
                 stk.pop();
-                preRet = {
-                    blockInfo.second == -1 ? false : true, blockInfo.second};
+                preRet = blockInfo.second;
 
                 data.attachBuffer(&bd, blockInfo.first);
                 if (data.isUnderflow()) {
