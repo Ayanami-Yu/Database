@@ -790,7 +790,7 @@ bool DataBlock::borrow(
     unsigned int blockid,
     std::vector<struct iovec> &dataIov)
 {
-    printf("borrow\n");
+    // printf("borrow\n");
 
     bool ret = false;
     unsigned short leFreesize = USHRT_MAX, riFreesize = USHRT_MAX;
@@ -867,25 +867,35 @@ bool DataBlock::borrow(
     // 因为子节点不为根，所以必然有兄弟节点
     // freesize 越小越可能借出键
     if (leFreesize <= riFreesize) {
-        sibling.attachBuffer(&bd, leftId);          
+        sibling.attachBuffer(&bd, leftId);
+
+        // 需根据节点类型来确定 iov 结构
+        std::vector<struct iovec> &iovRef =
+            sibling.getType() == BLOCK_TYPE_DATA ? dataIov : iov;
+
         getRecord( // 获取最右键
             sibling.buffer_,
             sibling.getSlotsPointer(),
             sibling.getSlots() - 1,
-            iov);
-        sibling.removeRecord(iov);
+            iovRef);
+        sibling.removeRecord(iovRef);
         if (sibling.isUnderflow()) { // 若借出键后会下溢
-            sibling.insertRecord(iov);
+            sibling.insertRecord(iovRef);
             ret = false;
         } else {
-            data.insertRecord(iov);
+            data.insertRecord(iovRef);
 
             // 修改两个子节点对应的中位键
             getRecord(buffer_, getSlotsPointer(), idx, splitIov);
             removeRecord(splitIov);
-            splitKey = *(long long *) iov[0].iov_base; // iov 此时的值为被移动的记录
+
+            // 重新获取 data 的第一个键
+            getRecord(data.buffer_, data.getSlotsPointer(), 0, iovRef);
+            splitKey = *(long long *)
+                            iovRef[data.getType() == BLOCK_TYPE_DATA ? keyIdx : 0]
+                                .iov_base;           
             splitVal = blockid;
-            intType->htobe(&splitVal);
+            intType->htobe(&splitVal); // iov 此时的值为被移动的记录
 
             // 再次插入本节点时仍需考虑分裂
             // 因为尽管 blockid 的长度固定，但主键仍有可能是变长的
@@ -908,11 +918,18 @@ bool DataBlock::borrow(
                 data.insertRecord(dataIov);
 
                 // 修改两个子节点对应的中位键
-                getRecord(buffer_, getSlotsPointer(), idx + 1, splitIov);
+                getRecord(buffer_, getSlotsPointer(), (unsigned short) idx + 1, splitIov);
                 removeRecord(splitIov);
+
+                // 因为 sibling 的原第一个记录已被删除，
+                // 故需重新获取它的第一个记录
+                getRecord(
+                    sibling.buffer_, sibling.getSlotsPointer(), 0, dataIov);
                 splitKey = *(long long *) dataIov[keyIdx].iov_base;
                 splitVal = rightId;
-                intType->htobe(&rightId);
+
+                // 注意是转换 splitVal 而非 rightId 的字节序
+                intType->htobe(&splitVal); 
                 insertRecord(splitIov);                
                 ret = true;
             }            
@@ -948,9 +965,14 @@ bool DataBlock::borrow(
                 // 修改两个子节点对应的中位键
                 getRecord(buffer_, getSlotsPointer(), idx + 1, splitIov);
                 removeRecord(splitIov);
+
+                // 重新获取 sibling 的第一个记录
+                // 注意内节点使用 tmpIov
+                getRecord(
+                    sibling.buffer_, sibling.getSlotsPointer(), 0, tmpIov);
                 splitKey = *(long long *) tmpIov[0].iov_base;
                 splitVal = rightId; // 注意中位键对应的是右侧的 sibling
-                intType->htobe(&rightId);
+                intType->htobe(&splitVal);
                 insertRecord(splitIov);
                 ret = true;
             }
@@ -966,7 +988,7 @@ void DataBlock::merge(
     unsigned int blockid,
     std::vector<struct iovec> &dataIov)
 {
-    printf("merge\n");
+    // printf("merge\n");
 
     unsigned short leFreesize = 0, riFreesize = 0;
     unsigned int leftId = -1, rightId = -1, tmpLen = sizeof(unsigned int);   
@@ -1038,7 +1060,6 @@ void DataBlock::merge(
             sibling.setNext(NULL);
         }           
     }
-
     kBuffer.releaseBuf(bd);
     kBuffer.releaseBuf(bd2);
 }
@@ -1113,6 +1134,40 @@ void DataBlock::mergeBlock(
     kBuffer.releaseBuf(bd);
 }
 
+void debugShowRecords(Table *table, unsigned int blockid)
+{
+    using namespace db;
+
+    DataType *bigint = findDataType("BIGINT");
+    BufDesp *bd = nullptr;
+    DataBlock data;
+    data.setTable(table);
+    data.attachBuffer(&bd, blockid);
+    Slot *slots = data.getSlotsPointer();
+
+    long long tmpKey;
+    unsigned int tmpLen = (unsigned int) sizeof(long long);
+    std::vector<long long> debugKeys;
+
+    for (int i = 0; i < data.getSlots(); ++i) {
+        Record record;
+        record.attach(
+            data.buffer_ + be16toh(slots[i].offset), be16toh(slots[i].length));
+        record.getByIndex((char *) &tmpKey, &tmpLen, 0);
+
+        bigint->betoh(&tmpKey);
+        debugKeys.push_back(tmpKey);
+    }
+
+    printf("blockid = %u\n", blockid);
+    for (int i = 0; i < debugKeys.size(); ++i) {
+        printf("%lld ", debugKeys[i]);
+    }
+    printf("\n\n");
+
+    kBuffer.releaseBuf(bd);
+}
+
 int DataBlock::remove(std::vector<struct iovec> &iov, bool debug)
 {
     RelationInfo *info = table_->info_;
@@ -1155,7 +1210,10 @@ int DataBlock::remove(std::vector<struct iovec> &iov, bool debug)
         ret = (int) data.searchRecord(iov[keyIdx].iov_base, iov[keyIdx].iov_len);
 
         if (data.getType() == BLOCK_TYPE_DATA) { // 叶节点
-            stk.pop();                           // 准备向上回溯   
+            stk.pop();                           // 准备向上回溯
+
+            debugShowRecords(table_, data.getSelf());
+
             if (!data.removeRecord(iov)) {       // 记录不存在
                 kBuffer.releaseBuf(bd);
                 return EFAULT;
@@ -1198,7 +1256,9 @@ int DataBlock::remove(std::vector<struct iovec> &iov, bool debug)
                             // 因为下一轮会对其检查
                             parent.merge(preRet, data.getSelf(), iov);
                         }
-                        kBuffer.releaseBuf(bd2);                       
+                        kBuffer.releaseBuf(bd2); 
+
+                        debugShowRecords(table_, blockInfo.first);
                     } else {
                         // 根节点下溢分两种情况：
                         // 只剩一个指针时，将根节点删除，并将根设为原来的唯一子节点
@@ -1211,9 +1271,11 @@ int DataBlock::remove(std::vector<struct iovec> &iov, bool debug)
                             kBuffer.releaseBuf(bd2);
                         }
                         kBuffer.releaseBuf(bd);
+
+                        debugShowRecords(table_, blockInfo.first);
                         return S_OK;
                     }
-                }
+                }               
                 kBuffer.releaseBuf(bd);
             }
             return S_OK;

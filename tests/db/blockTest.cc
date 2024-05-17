@@ -1264,18 +1264,21 @@ TEST_CASE("IndexTest", "[p2]")
         }
 
         // 检查删除
-        for (int i = 0; i < 7; ++i) {
-            printf("%d\n", i);
+        for (int i = 0; i < preKeys.size(); ++i) {
+            printf("i = %d\n", i);
             tmpKey = preKeys[i];
             tmpVal = (unsigned int) preKeys[i] * 10;
             REQUIRE(data.remove(iov, false) == S_OK);
+            // data.remove(iov, false);
         }
-
-        // Debug key = 44
-        // printf("10\n");
-        tmpKey = preKeys[7];
-        tmpVal = (unsigned int) preKeys[7] * 10;
+       
+        // Debug key = 30
+        /* const int idx = 15;
+        printf("i = %d\n", idx);
+        tmpKey = preKeys[idx];
+        tmpVal = (unsigned int) preKeys[idx] * 10;
         REQUIRE(data.remove(iov, true) == S_OK);
+        // data.remove(iov, true); */
 
         kBuffer.releaseBuf(bd);
     }
