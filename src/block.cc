@@ -790,8 +790,6 @@ bool DataBlock::borrow(
     unsigned int blockid,
     std::vector<struct iovec> &dataIov)
 {
-    // printf("borrow\n");
-
     bool ret = false;
     unsigned short leFreesize = USHRT_MAX, riFreesize = USHRT_MAX;
     unsigned int leftId = -1, rightId = -1, tmpLen = sizeof(unsigned int);
@@ -988,8 +986,6 @@ void DataBlock::merge(
     unsigned int blockid,
     std::vector<struct iovec> &dataIov)
 {
-    // printf("merge\n");
-
     unsigned short leFreesize = 0, riFreesize = 0;
     unsigned int leftId = -1, rightId = -1, tmpLen = sizeof(unsigned int);   
     BufDesp *bd = nullptr, *bd2;
@@ -1134,14 +1130,14 @@ void DataBlock::mergeBlock(
     kBuffer.releaseBuf(bd);
 }
 
-void debugShowRecords(Table *table, unsigned int blockid)
+void DataBlock::showRecords(unsigned int blockid)
 {
     using namespace db;
 
     DataType *bigint = findDataType("BIGINT");
     BufDesp *bd = nullptr;
     DataBlock data;
-    data.setTable(table);
+    data.setTable(table_);
     data.attachBuffer(&bd, blockid);
     Slot *slots = data.getSlotsPointer();
 
@@ -1168,7 +1164,7 @@ void debugShowRecords(Table *table, unsigned int blockid)
     kBuffer.releaseBuf(bd);
 }
 
-int DataBlock::remove(std::vector<struct iovec> &iov, bool debug)
+int DataBlock::remove(std::vector<struct iovec> &iov)
 {
     RelationInfo *info = table_->info_;
     unsigned int keyIdx = info->key;
@@ -1211,9 +1207,6 @@ int DataBlock::remove(std::vector<struct iovec> &iov, bool debug)
 
         if (data.getType() == BLOCK_TYPE_DATA) { // 叶节点
             stk.pop();                           // 准备向上回溯
-
-            debugShowRecords(table_, data.getSelf());
-
             if (!data.removeRecord(iov)) {       // 记录不存在
                 kBuffer.releaseBuf(bd);
                 return EFAULT;
@@ -1257,8 +1250,6 @@ int DataBlock::remove(std::vector<struct iovec> &iov, bool debug)
                             parent.merge(preRet, data.getSelf(), iov);
                         }
                         kBuffer.releaseBuf(bd2); 
-
-                        debugShowRecords(table_, blockInfo.first);
                     } else {
                         // 根节点下溢分两种情况：
                         // 只剩一个指针时，将根节点删除，并将根设为原来的唯一子节点
@@ -1271,8 +1262,6 @@ int DataBlock::remove(std::vector<struct iovec> &iov, bool debug)
                             kBuffer.releaseBuf(bd2);
                         }
                         kBuffer.releaseBuf(bd);
-
-                        debugShowRecords(table_, blockInfo.first);
                         return S_OK;
                     }
                 }               
@@ -1311,9 +1300,12 @@ int DataBlock::remove(std::vector<struct iovec> &iov, bool debug)
     return EFAULT;
 }
 
-int DataBlock::update(std::vector<struct iovec> &iov) 
+int DataBlock::update(std::vector<struct iovec> &iov)
 {
-    return EFAULT;
+    if (remove(iov) == S_OK && insert(iov) == S_OK)
+        return S_OK;
+    else
+        return EFAULT;
 }
 
 bool DataBlock::copyRecord(Record &record)

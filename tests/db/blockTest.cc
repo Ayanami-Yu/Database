@@ -1265,21 +1265,72 @@ TEST_CASE("IndexTest", "[p2]")
 
         // 检查删除
         for (int i = 0; i < preKeys.size(); ++i) {
-            printf("i = %d\n", i);
             tmpKey = preKeys[i];
             tmpVal = (unsigned int) preKeys[i] * 10;
-            REQUIRE(data.remove(iov, false) == S_OK);
-            // data.remove(iov, false);
-        }
-       
-        // Debug key = 30
-        /* const int idx = 15;
-        printf("i = %d\n", idx);
-        tmpKey = preKeys[idx];
-        tmpVal = (unsigned int) preKeys[idx] * 10;
-        REQUIRE(data.remove(iov, true) == S_OK);
-        // data.remove(iov, true); */
+            REQUIRE(data.remove(iov) == S_OK);
+        }       
 
+        kBuffer.releaseBuf(bd);
+    }
+
+    SECTION("update")
+    {
+        Table table;
+        REQUIRE(table.open("table") == S_OK);
+
+        DataType *bigint = findDataType("BIGINT");
+        DataType *intType = findDataType("INT");
+        std::vector<struct iovec> iov(2);
+
+        DataBlock data;
+        BufDesp *bd = nullptr;
+        data.setTable(&table);
+        data.attachBuffer(&bd, 1);
+
+        // 先初始化 iov 为任意值
+        long long key;
+        unsigned int val;
+        setIdxIov(bigint, intType, -1, &key, -1, &val, iov);
+
+        // B+树中剩余的键
+        std::vector<long long> preKeys = {
+            2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47};
+        
+        // 存放记录第2个字段原来的值
+        std::vector<unsigned int> preVals = {
+            20, 30, 50, 70, 110, 130, 170, 190, 230, 290, 310, 370, 410, 430, 470};
+
+        // 大规模插入，分裂为多个 block 后再检查更新
+        for (int i = 50; i < 1551; i += 2) {           
+            key = (long long) i;
+            val = (unsigned int) i * 10;
+            preKeys.push_back(key);
+            preVals.push_back(val);
+            bigint->htobe(&key);
+            intType->htobe(&val);
+            REQUIRE(data.insert(iov) == S_OK);
+        }
+
+        for (int i = 0; i < preKeys.size(); ++i) {           
+            bigint->htobe(&preKeys[i]); // 先确认键存在
+            REQUIRE(
+                data.search(&preKeys[i], (unsigned int) sizeof(long long), iov) ==
+                S_OK);
+            
+            // 将记录第2个字段的值均更新为2倍
+            val = preVals[i] * 2;
+            intType->htobe(&val);
+            REQUIRE(data.update(iov) == S_OK);            
+        }
+
+        // 检查更新
+        for (int i = 0; i < preKeys.size(); ++i) {
+            REQUIRE(
+                data.search(&preKeys[i], (unsigned int) sizeof(long long), iov) ==
+                S_OK);
+            intType->betoh(&val);
+            REQUIRE(val == preVals[i] * 2);
+        }      
         kBuffer.releaseBuf(bd);
     }
 }

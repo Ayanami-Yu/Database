@@ -632,14 +632,18 @@ class DataBlock : public MetaBlock
         int blockIdx,
         std::vector<struct iovec> &dataIov);
 
+    // keybuf 指向主键，成功时 iov 存储搜到的记录
     // len 为 keybuf 指向的 buffer 的长度
     // 需先将 keybuf 转换为网络字节序
     // iov 获取到的值是以网络字节序存储的
     int search(void *keybuf, unsigned int len, std::vector<struct iovec> &iov);
     // iov[0] 应给出所要删除的键及其长度
     int insert(std::vector<struct iovec> &iov); 
-    int remove(std::vector<struct iovec> &iov, bool debug);  
-    int update(std::vector<struct iovec> &iov);    
+    int remove(std::vector<struct iovec> &iov);  
+    int update(std::vector<struct iovec> &iov);
+
+    // 用于调试时打印一个 block 中的所有记录
+    void showRecords(unsigned int blockid);
 
     // 分裂块位置
     // 给定新增的记录大小和位置，计算从何处开始分裂该block
