@@ -512,7 +512,6 @@ int DataBlock::search(
     super.attach(bd->buffer);
 
     // 用于暂存搜索的结果
-    // long long tmpKey;
     size_t keySize = getKeyBytes(keyType);
     std::vector<char> tmpKey(keySize);
     unsigned int tmpVal;
@@ -611,7 +610,6 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
 
     // tmp 用于检验记录是否已存在及获取记录
     // iov 保存了待插入记录所以不能被破坏
-    // long long tmpKey;
     size_t keySize = getKeyBytes(keyType);
     std::vector<char> tmpKey(keySize);
     unsigned int tmpVal;
@@ -817,7 +815,6 @@ bool DataBlock::borrow(
     data.attachBuffer(&bd2, blockid);
     
     // 用于记录的插入和删除
-    // long long key;
     size_t keySize = getKeyBytes(keyType);
     std::vector<char> key(keySize);
     unsigned int val;
@@ -825,14 +822,12 @@ bool DataBlock::borrow(
         {&key[0], keySize}, {&val, sizeof(unsigned int)}};
 
     // 用于本节点替换原先的中位键
-    // long long splitKey;
     std::vector<char> splitKey(keySize);
     unsigned int splitVal;
     std::vector<struct iovec> splitIov = {
         {&splitKey[0], keySize}, {&splitVal, sizeof(unsigned int)}};
 
     // 用于借出最左键时记录原来从左往右第二个键值对
-    // long long tmpKey;
     std::vector<char> tmpKey(keySize);
     unsigned int tmpVal;
     std::vector<struct iovec> tmpIov = {
@@ -1021,7 +1016,6 @@ void DataBlock::merge(
     sibling.setTable(table_);
     data.attachBuffer(&bd2, blockid);
 
-    // long long tmpKey;
     size_t keySize = getKeyBytes(keyType);
     std::vector<char> tmpKey(keySize);
     unsigned int tmpVal;
@@ -1102,7 +1096,6 @@ void DataBlock::mergeBlock(
     data.setTable(table_);
     data.attachBuffer(&bd, blockid);
 
-    // long long tmpKey;
     size_t keySize = getKeyBytes(keyType);
     std::vector<char> tmpKey(keySize);
     unsigned int tmpVal;
@@ -1220,7 +1213,6 @@ int DataBlock::remove(std::vector<struct iovec> &iov)
     unsigned int parentId;
 
     // 用于在向下定位时暂存内节点搜到的记录
-    // long long tmpKey;
     size_t keySize = getKeyBytes(keyType);
     std::vector<char> tmpKey(keySize);
     unsigned int tmpVal;
