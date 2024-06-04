@@ -643,6 +643,7 @@ class DataBlock : public MetaBlock
     int update(std::vector<struct iovec> &iov);
 
     // 用于调试时打印一个 block 中的所有记录
+    // 和本实验的实现无关，因此不必改为动态获取主键类型
     void showRecords(unsigned int blockid);
 
     // 分裂块位置
@@ -661,6 +662,10 @@ class DataBlock : public MetaBlock
     RecordIterator beginrecord();
     RecordIterator endrecord();
 };
+
+// 返回 DataType 对应类型的字节数
+// 不考虑 VARCHAR 作为主键类型
+inline size_t getKeyBytes(DataType *keyType) { return keyType->size; }
 
 // 将 slots[idx] 处的记录赋给 iov
 inline void getRecord(

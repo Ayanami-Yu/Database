@@ -470,12 +470,12 @@ bool DataBlock::updateRecord(std::vector<struct iovec>& iov)
 bool DataBlock::removeRecord(std::vector<struct iovec>& iov) 
 { 
     RelationInfo *info = table_->info_;
-    unsigned int key = info->key;
-    DataType *type = info->fields[key].type;
+    unsigned int keyIdx = info->key;
+    DataType *keyType = info->fields[keyIdx].type;
 
     // 确定该记录对应的 slot 下标
     unsigned short index =
-        type->search(buffer_, key, iov[key].iov_base, iov[key].iov_len);
+        keyType->search(buffer_, keyIdx, iov[keyIdx].iov_base, iov[keyIdx].iov_len);
     if (index >= getSlots()) return false; // 记录不存在
 
     // 当 index 处于范围中时仍可能记录不存在
@@ -484,10 +484,12 @@ bool DataBlock::removeRecord(std::vector<struct iovec>& iov)
     record.attach(
         buffer_ + be16toh(slots[index].offset), be16toh(slots[index].length));
 
-    long long tmpKey = 0;
-    unsigned int tmpKeyLen = (unsigned int) iov[key].iov_len;
-    record.getByIndex((char *) &tmpKey, &tmpKeyLen, key);
-    if (memcmp(&tmpKey, iov[key].iov_base, iov[key].iov_len) != 0) return false;
+    size_t keySize = getKeyBytes(keyType);
+    std::vector<char> tmpKey(keySize);
+    unsigned int tmpKeyLen = (unsigned int) iov[keyIdx].iov_len;
+    
+    record.getByIndex((char *) &tmpKey[0], &tmpKeyLen, keyIdx);
+    if (memcmp(&tmpKey[0], iov[keyIdx].iov_base, iov[keyIdx].iov_len) != 0) return false;
 
     // 设置记录的 tombstone，挤压 slots
     // 修改 slots 数目，freesize 加回删除的 slot
@@ -503,22 +505,26 @@ int DataBlock::search(
 {
     RelationInfo *info = table_->info_;
     unsigned int keyIdx = info->key;
+    DataType *keyType = info->fields[keyIdx].type;
 
     SuperBlock super;
     BufDesp *bd = kBuffer.borrow(table_->name_.c_str(), 0);
     super.attach(bd->buffer);
 
     // 用于暂存搜索的结果
-    long long tmpKey;
+    // long long tmpKey;
+    size_t keySize = getKeyBytes(keyType);
+    std::vector<char> tmpKey(keySize);
     unsigned int tmpVal;
     std::vector<struct iovec> tmp = {
-        {&tmpKey, sizeof(long long)}, {&tmpVal, sizeof(unsigned int)}};
+        {&tmpKey[0], keySize}, {&tmpVal, sizeof(unsigned int)}};
 
     std::stack<unsigned int> stk; // 存 blockid
     stk.push(super.getRoot());
     kBuffer.releaseBuf(bd); // 释放超块
 
-    DataType *int_type = findDataType("INT");
+    // blockid 的数据类型是固定的
+    DataType *int_type = findDataType("INT"); 
     while (!stk.empty()) {
         unsigned int blockid = stk.top();
         stk.pop();
@@ -535,7 +541,7 @@ int DataBlock::search(
                 kBuffer.releaseBuf(bd);
                 return EFAULT;
             } 
-            DataType *bigint = findDataType("BIGINT");
+            // DataType *bigint = findDataType("BIGINT");
             getRecord(data.buffer_, slots, ret, iov);
 
             // ret == 0 时仍可能记录不存在
@@ -605,10 +611,13 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
 
     // tmp 用于检验记录是否已存在及获取记录
     // iov 保存了待插入记录所以不能被破坏
-    long long tmpKey;
+    // long long tmpKey;
+    size_t keySize = getKeyBytes(keyType);
+    std::vector<char> tmpKey(keySize);
     unsigned int tmpVal;
     std::vector<struct iovec> tmp = {
-        {&tmpKey, sizeof(long long)}, {&tmpVal, sizeof(unsigned int)}};
+        {&tmpKey[0], keySize}, {&tmpVal, sizeof(unsigned int)}};
+
     std::vector<struct iovec> rec; // 上一节点要插入的记录
     std::pair<unsigned int, bool> splitRet;
     std::pair<bool, unsigned int> pret;        
@@ -796,6 +805,7 @@ bool DataBlock::borrow(
     
     RelationInfo *info = table_->info_;
     unsigned int keyIdx = info->key;
+    DataType *keyType = info->fields[keyIdx].type;
 
     BufDesp *bd = nullptr, *bd2 = nullptr, *bd3 = nullptr;   
     Slot *slots = getSlotsPointer();
@@ -807,22 +817,26 @@ bool DataBlock::borrow(
     data.attachBuffer(&bd2, blockid);
     
     // 用于记录的插入和删除
-    long long key;
+    // long long key;
+    size_t keySize = getKeyBytes(keyType);
+    std::vector<char> key(keySize);
     unsigned int val;
     std::vector<struct iovec> iov = {
-        {&key, sizeof(long long)}, {&val, sizeof(unsigned int)}};
+        {&key[0], keySize}, {&val, sizeof(unsigned int)}};
 
     // 用于本节点替换原先的中位键
-    long long splitKey;
+    // long long splitKey;
+    std::vector<char> splitKey(keySize);
     unsigned int splitVal;
     std::vector<struct iovec> splitIov = {
-        {&splitKey, sizeof(long long)}, {&splitVal, sizeof(unsigned int)}};
+        {&splitKey[0], keySize}, {&splitVal, sizeof(unsigned int)}};
 
     // 用于借出最左键时记录原来从左往右第二个键值对
-    long long tmpKey;
+    // long long tmpKey;
+    std::vector<char> tmpKey(keySize);
     unsigned int tmpVal;
     std::vector<struct iovec> tmpIov = {
-        {&tmpKey, sizeof(long long)}, {&tmpVal, sizeof(unsigned int)}};
+        {&tmpKey[0], keySize}, {&tmpVal, sizeof(unsigned int)}};
 
     // 若 data 非最左节点，获取左兄弟 freesize
     if (idx != -1) {        
@@ -889,9 +903,13 @@ bool DataBlock::borrow(
 
             // 重新获取 data 的第一个键
             getRecord(data.buffer_, data.getSlotsPointer(), 0, iovRef);
-            splitKey = *(long long *)
-                            iovRef[data.getType() == BLOCK_TYPE_DATA ? keyIdx : 0]
-                                .iov_base;           
+            // splitKey = *(long long *)
+                            // iovRef[data.getType() == BLOCK_TYPE_DATA ? keyIdx : 0]
+                                // .iov_base;     
+            memcpy(
+                &splitKey[0],
+                iovRef[data.getType() == BLOCK_TYPE_DATA ? keyIdx : 0].iov_base,
+                keySize);      
             splitVal = blockid;
             intType->htobe(&splitVal); // iov 此时的值为被移动的记录
 
@@ -923,7 +941,8 @@ bool DataBlock::borrow(
                 // 故需重新获取它的第一个记录
                 getRecord(
                     sibling.buffer_, sibling.getSlotsPointer(), 0, dataIov);
-                splitKey = *(long long *) dataIov[keyIdx].iov_base;
+                // splitKey = *(long long *) dataIov[keyIdx].iov_base;
+                memcpy(&splitKey[0], dataIov[keyIdx].iov_base, keySize);
                 splitVal = rightId;
 
                 // 注意是转换 splitVal 而非 rightId 的字节序
@@ -968,7 +987,8 @@ bool DataBlock::borrow(
                 // 注意内节点使用 tmpIov
                 getRecord(
                     sibling.buffer_, sibling.getSlotsPointer(), 0, tmpIov);
-                splitKey = *(long long *) tmpIov[0].iov_base;
+                // splitKey = *(long long *) tmpIov[0].iov_base;
+                memcpy(&splitKey[0], tmpIov[0].iov_base, keySize);
                 splitVal = rightId; // 注意中位键对应的是右侧的 sibling
                 intType->htobe(&splitVal);
                 insertRecord(splitIov);
@@ -992,15 +1012,21 @@ void DataBlock::merge(
     Slot *slots = getSlotsPointer();
     DataType *intType = findDataType("INT");
 
+    RelationInfo *info = table_->info_;
+    unsigned int keyIdx = info->key;
+    DataType *keyType = info->fields[keyIdx].type;
+
     DataBlock data, sibling;
     data.setTable(table_);
     sibling.setTable(table_);
     data.attachBuffer(&bd2, blockid);
 
-    long long tmpKey;
+    // long long tmpKey;
+    size_t keySize = getKeyBytes(keyType);
+    std::vector<char> tmpKey(keySize);
     unsigned int tmpVal;
     std::vector<struct iovec> tmpIov = {
-        {&tmpKey, sizeof(long long)}, {&tmpVal, sizeof(unsigned int)}};
+        {&tmpKey[0], keySize}, {&tmpVal, sizeof(unsigned int)}};
 
     if (idx != -1) {
         DataBlock left;
@@ -1068,6 +1094,7 @@ void DataBlock::mergeBlock(
 {
     RelationInfo *info = table_->info_;
     unsigned int keyIdx = info->key;
+    DataType *keyType = info->fields[keyIdx].type;
 
     BufDesp *bd = nullptr, *bd2 = nullptr;
     DataType *intType = findDataType("INT");
@@ -1075,10 +1102,12 @@ void DataBlock::mergeBlock(
     data.setTable(table_);
     data.attachBuffer(&bd, blockid);
 
-    long long tmpKey;
+    // long long tmpKey;
+    size_t keySize = getKeyBytes(keyType);
+    std::vector<char> tmpKey(keySize);
     unsigned int tmpVal;
     std::vector<struct iovec> tmpIov = {
-        {&tmpKey, sizeof(long long)}, {&tmpVal, sizeof(unsigned int)}};
+        {&tmpKey[0], keySize}, {&tmpVal, sizeof(unsigned int)}};
 
     // 必须先删去父节点中 data 对应的记录，
     // 否则 insert 在向下定位时会找到错误的位置
@@ -1134,6 +1163,9 @@ void DataBlock::showRecords(unsigned int blockid)
 {
     using namespace db;
 
+    RelationInfo *info = table_->info_;
+    unsigned int keyIdx = info->key;
+
     DataType *bigint = findDataType("BIGINT");
     BufDesp *bd = nullptr;
     DataBlock data;
@@ -1188,10 +1220,12 @@ int DataBlock::remove(std::vector<struct iovec> &iov)
     unsigned int parentId;
 
     // 用于在向下定位时暂存内节点搜到的记录
-    long long tmpKey;
+    // long long tmpKey;
+    size_t keySize = getKeyBytes(keyType);
+    std::vector<char> tmpKey(keySize);
     unsigned int tmpVal;
     std::vector<struct iovec> tmp = {
-        {&tmpKey, sizeof(long long)}, {&tmpVal, sizeof(unsigned int)}};
+        {&tmpKey[0], keySize}, {&tmpVal, sizeof(unsigned int)}};
 
     DataBlock data, parent;
     data.setTable(table_);
