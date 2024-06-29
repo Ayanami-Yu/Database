@@ -785,8 +785,7 @@ TEST_CASE("BlockTest", "[p1]")
         bd = kBuffer.borrow("table", 1);
         data.attach(bd->buffer);
 
-        // 检查 block，table 表是空的，未添加任何表项
-        // REQUIRE(data.checksum());
+        // 检查 block 是空的
         unsigned short size = data.getFreespaceSize();
         REQUIRE(
             BLOCK_SIZE - sizeof(DataHeader) - data.getTrailerSize() == size);
@@ -812,8 +811,8 @@ TEST_CASE("BlockTest", "[p1]")
         std::pair<bool, unsigned short> ret = data.insertRecord(iov);
         REQUIRE(ret.first);
         REQUIRE(ret.second == 0);
-        REQUIRE(data.getFreespaceSize() == osize - nsize);
-        REQUIRE(data.getSlots() == 1);
+        REQUIRE(data.getFreespaceSize() == osize - nsize);  // 检查 free space
+        REQUIRE(data.getSlots() == 1);  // 检查此时只有1条记录
         Slot *slots = data.getSlotsPointer();
         Record record;
         record.attach(
@@ -908,6 +907,23 @@ TEST_CASE("BlockTest", "[p1]")
         unsigned int blockid = data.getNext();
         bd = kBuffer.borrow("table", blockid);
         REQUIRE(bd);
+
+        // 检查新记录插在了新 block 中       
+        DataBlock next;
+        next.setTable(&table);
+        next.attach(bd->buffer);
+        slots = next.getSlotsPointer();
+
+        // 因为主键是递增的，所以新记录一定是新 block 的最后一条
+        record.attach(
+            next.buffer_ + be16toh(slots[next.getSlots() - 1].offset),
+            be16toh(slots[next.getSlots() - 1].length));
+        len = sizeof(LONG_ADDR);
+        std::vector<char> tmp_addr(len);
+        record.getByIndex(&tmp_addr[0], &len, 2);
+        char_type->betoh(&tmp_addr[0]);
+        REQUIRE(strcmp(&tmp_addr[0], addr) == 0);
+
         kBuffer.releaseBuf(bd);
     }
 
