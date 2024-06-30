@@ -540,7 +540,6 @@ int DataBlock::search(
                 kBuffer.releaseBuf(bd);
                 return EFAULT;
             } 
-            // DataType *bigint = findDataType("BIGINT");
             getRecord(data.buffer_, slots, ret, iov);
 
             // ret == 0 时仍可能记录不存在
@@ -873,7 +872,7 @@ bool DataBlock::borrow(
 
     // 因为子节点不为根，所以必然有兄弟节点
     // freesize 越小越可能借出键
-    if (leFreesize <= riFreesize) {
+    if (leFreesize <= riFreesize) { // 向左兄弟借键
         sibling.attachBuffer(&bd, leftId);
 
         // 需根据节点类型来确定 iov 结构
@@ -898,9 +897,8 @@ bool DataBlock::borrow(
 
             // 重新获取 data 的第一个键
             getRecord(data.buffer_, data.getSlotsPointer(), 0, iovRef);
-            // splitKey = *(long long *)
-                            // iovRef[data.getType() == BLOCK_TYPE_DATA ? keyIdx : 0]
-                                // .iov_base;     
+    
+            // splitIov 的主键字段指向 splitKey
             memcpy(
                 &splitKey[0],
                 iovRef[data.getType() == BLOCK_TYPE_DATA ? keyIdx : 0].iov_base,
@@ -914,7 +912,7 @@ bool DataBlock::borrow(
             insertRecord(splitIov);
             ret = true;
         }
-    } else {
+    } else { // 向右兄弟借键
         sibling.attachBuffer(&bd, rightId);
         
         // 兄弟为叶节点时，next 指向下一叶节点而非最左指针
@@ -936,7 +934,6 @@ bool DataBlock::borrow(
                 // 故需重新获取它的第一个记录
                 getRecord(
                     sibling.buffer_, sibling.getSlotsPointer(), 0, dataIov);
-                // splitKey = *(long long *) dataIov[keyIdx].iov_base;
                 memcpy(&splitKey[0], dataIov[keyIdx].iov_base, keySize);
                 splitVal = rightId;
 
@@ -982,7 +979,6 @@ bool DataBlock::borrow(
                 // 注意内节点使用 tmpIov
                 getRecord(
                     sibling.buffer_, sibling.getSlotsPointer(), 0, tmpIov);
-                // splitKey = *(long long *) tmpIov[0].iov_base;
                 memcpy(&splitKey[0], tmpIov[0].iov_base, keySize);
                 splitVal = rightId; // 注意中位键对应的是右侧的 sibling
                 intType->htobe(&splitVal);

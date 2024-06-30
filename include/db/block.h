@@ -604,7 +604,7 @@ class DataBlock : public MetaBlock
     // 注意一定要与 releaseBuf 搭配
     inline void attachBuffer(struct BufDesp **bd, unsigned int blockid);
     // 给定子节点对应的 slots 下标，尝试为其借键
-    // 当 idx == -1 (65535) 时对应最左指针
+    // 当 idx == -1 时对应最左指针
     // 当兄弟为叶节点时，需要 dataIov 来确定记录结构
     // 注意调用后 dataIov 的值不确定
     // 失败则返回 false
