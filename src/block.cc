@@ -645,6 +645,7 @@ int DataBlock::insert(std::vector<struct iovec> &iov)
                 splitRet = data.split(pret.second, iov);
                 next.attachBuffer(&bd2, splitRet.first);
                 next.setType(BLOCK_TYPE_DATA);
+                data.setNext(next.getSelf()); // 维护叶节点的单链表
 
                 if (splitRet.second) data.insertRecord(iov);
                 else next.insertRecord(iov);

@@ -1015,6 +1015,7 @@ bool createBlock(
     unsigned short type,
     std::vector<std::vector<struct iovec>> &iovs)
 {
+    // 检查与期待的 blockid 是否一致
     unsigned int selfid = table->allocate();
     REQUIRE(selfid == blockid);
 
@@ -1040,6 +1041,9 @@ TEST_CASE("IndexTest", "[p2]")
     {
         Table table;
         REQUIRE(table.open("table") == S_OK);
+
+        // 因为在 createBlock 中会调用 allocate，
+        // 所以需要先把之前创建了的1号块释放
         table.deallocate(1);
 
         DataType *bigint = findDataType("BIGINT");
@@ -1225,6 +1229,13 @@ TEST_CASE("IndexTest", "[p2]")
             REQUIRE(data.search(&preKeys[i], sizeof(long long), iov) == S_OK);
         }
 
+        DataBlock last;
+        last.setTable(&table);
+        BufDesp *bd2 = kBuffer.borrow("table", 9); // 当前B+树中最右（键最大）的叶节点
+        REQUIRE(bd2);
+        last.attach(bd2->buffer);
+        REQUIRE(!last.getNext()); // 检查此时该叶节点没有后继节点
+
         // 大规模插入
         std::vector<long long> keys = { 1, 8, 12, 15, 22, 30, 33, 44, 46, 48 };
         std::vector<unsigned int> vals = { 10, 80, 120, 150, 220, 300, 330, 440, 460, 480 };
@@ -1246,6 +1257,10 @@ TEST_CASE("IndexTest", "[p2]")
             REQUIRE(*(unsigned int *) iov[1].iov_base == vals[i]);
         }       
 
+        // 检查发生了分裂，即原先键最大的叶节点有了后继节点
+        REQUIRE(last.getNext() == 10);
+
+        kBuffer.releaseBuf(bd2);
         kBuffer.releaseBuf(bd);
     }
 
@@ -1257,11 +1272,15 @@ TEST_CASE("IndexTest", "[p2]")
         DataType *bigint = findDataType("BIGINT");
         DataType *int_type = findDataType("INT");
         std::vector<struct iovec> iov(2);
+        std::vector<struct iovec> tmpIov(2);
 
         DataBlock data;
         BufDesp *bd = nullptr;
         data.setTable(&table);
         data.attachBuffer(&bd, 1);
+
+        // 检查1号块 next 非空，即有子节点且为2号块
+        REQUIRE(data.getNext() == 2);
 
         // 先初始化 iov 为任意值
         long long tmpKey;
@@ -1284,8 +1303,11 @@ TEST_CASE("IndexTest", "[p2]")
             tmpKey = preKeys[i];
             tmpVal = (unsigned int) preKeys[i] * 10;
             REQUIRE(data.remove(iov) == S_OK);
-        }       
+        }   
 
+        // 检查1号块的 next 已空，即发生了合并
+        REQUIRE(!data.getNext());
+        
         kBuffer.releaseBuf(bd);
     }
 
