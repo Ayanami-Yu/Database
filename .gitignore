@@ -9,7 +9,6 @@ CMakeSettings.json
 *.aux
 *.fdb_latexmk
 *.toc
-*.pdf
 *.out
 *.thm
 *.synctex.gz
