@@ -1,11 +1,4 @@
-////
-// @file table.h
-// @brief
 // 存储管理
-//
-// @author niexw
-// @email niexiaowen@uestc.edu.cn
-//
 #ifndef __DB_TABLE_H__
 #define __DB_TABLE_H__
 

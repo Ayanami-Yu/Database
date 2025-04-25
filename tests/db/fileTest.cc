@@ -1,10 +1,3 @@
-////
-// @file fileTest.cc
-// @brief
-//
-// @author niexw
-// @email niexiaowen@uestc.edu.cn
-//
 #include "../catch.hpp"
 #include <db/file.h>
 #include <db/buffer.h>

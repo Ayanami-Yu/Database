@@ -1,6 +1,3 @@
-////
-// @file block.h
-// @brief
 // 定义block
 // block是记录、索引的存储单元。在MySQL和HBase中，存储单元与分配单位是分开的，一般来说，
 // 最小分配单元要比block大得多。
@@ -44,10 +41,6 @@
 // +--------------------+ <--- BLOCK_TRAILER
 // |      trailer       |
 // +--------------------+
-//
-// @author niexw
-// @email niexiaowen@uestc.edu.cn
-//
 #ifndef __DB_BLOCK_H__
 #define __DB_BLOCK_H__
 

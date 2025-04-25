@@ -1,10 +1,3 @@
-////
-// @file schema.cc
-// @brief
-//
-// @author niexw
-// @email niexiaowen@uestc.edu.cn
-//
 #include <stdlib.h>
 #include <db/schema.h>
 #include <db/block.h>

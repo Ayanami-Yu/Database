@@ -1,10 +1,3 @@
-////
-// @file recordTest.cc
-// @brief
-//
-// @author niexw
-// @email niexiaowen@uestc.edu.cn
-//
 #include "../catch.hpp"
 #include <db/record.h>
 using namespace db;

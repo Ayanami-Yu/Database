@@ -1,11 +1,4 @@
-////
-// @file file.cc
-// @brief
 // 实现文件功能
-//
-// @author niexw
-// @email niexiaowen@uestc.edu.cn
-//
 #include <db/file.h>
 #include <db/schema.h>
 

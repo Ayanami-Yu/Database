@@ -1,11 +1,4 @@
-////
-// @file file.h
-// @brief
 // 文件操作
-//
-// @author niexw
-// @email niexiaowen@uestc.edu.cn
-//
 #ifndef __DB_FILE_H__
 #define __DB_FILE_H__
 

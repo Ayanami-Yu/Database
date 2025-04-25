@@ -2,10 +2,6 @@
 # @file CMakeLists.txt
 # @brief
 # src目录的cmake文件
-#
-# @author niexw
-# @email xiaowen.nie.cn@gmail.com
-#
 include_directories(${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/src)
 
 set(LIB_DB_IMPL integer.cc file.cc datatype.cc timestamp.cc record.cc block.cc

@@ -3,9 +3,6 @@
 # @brief
 # db项目的根CMakeLists.txt
 #
-# @author niexw
-# @email xiaowen.nie.cn@gmail.com
-#
 project(db)
 cmake_minimum_required(VERSION 3.0)
 message(STATUS "### Begin to configure project db ###")

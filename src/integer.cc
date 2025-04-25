@@ -1,11 +1,4 @@
-////
-// @file integer.cc
-// @brief
 // 实现压缩整数表示
-//
-// @author niexw
-// @email niexiaowen@uestc.edu.cn
-//
 #include <db/integer.h>
 
 namespace db {

@@ -1,10 +1,3 @@
-////
-// @file checksumTest.cc
-// @brief
-//
-// @author niexw
-// @email niexiaowen@uestc.edu.cn
-//
 #include "../catch.hpp"
 #include <string.h>
 #include <db/checksum.h>

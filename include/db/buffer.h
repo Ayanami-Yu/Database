@@ -1,15 +1,8 @@
-////
-// @file buffer.h
-// @brief
 // 数据库buffer层
 //
-// @author niexw
-// @email niexiaowen@uestc.edu.cn
-// 
 // 文件切分为 blocks，因此读时需同时指定文件和 blockid；
 // buffer 设计：十字链表组织 Hash Table 和 LRU 队列；
 // 淘汰 LRU 中的 page 时，若为脏页则需先刷到磁盘上，否则直接丢掉。
-//
 #ifndef __DB_BUFFER_H__
 #define __DB_BUFFER_H__
 

@@ -1,12 +1,5 @@
-////
-// @file checksum.h
-// @brief
 // inet校验和
 // 按照网络字节序输出unsigned short校验和
-//
-// @author niexw
-// @email niexiaowen@uestc.edu.cn
-//
 #ifndef __DB_CHECKSUM_H__
 #define __DB_CHECKSUM_H__
 

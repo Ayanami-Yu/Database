@@ -3,9 +3,6 @@
 # @brief
 # tests目录下cmake文件
 #
-# @author niexw
-# @email xiaowen.nie.cn@gmail.com
-#
 include_directories(${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/src)
 
 # catch要求打开异常

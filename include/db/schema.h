@@ -1,6 +1,3 @@
-////
-// @file schema.h
-// @brief
 // 定义schema
 // meta.db存放所有表的元信息，每张表用meta.db的一行来描述。一行是变长的，它包含：
 // 1. 以表名做键；
@@ -10,10 +7,6 @@
 // 5. 各种统计信息，表的大小，行数等；
 // 
 // 存储元数据方式：看成一个 Record，但该 Record 是变长的（因为不同表所存元数据总长不同）
-//
-// @author niexw
-// @email niexiaowen@uestc.edu.cn
-//
 #ifndef __DB_SCHEMA_H__
 #define __DB_SCHEMA_H__
 

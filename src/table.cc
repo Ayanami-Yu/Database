@@ -1,11 +1,4 @@
-////
-// @file table.cc
-// @brief
 // 实现存储管理
-//
-// @author niexw
-// @email niexiaowen@uestc.edu.cn
-//
 #include <db/table.h>
 
 namespace db {

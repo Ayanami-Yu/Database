@@ -1,6 +1,3 @@
-////
-// @file record.h
-// @brief
 // 定义数据库记录
 // 采用类似MySQL的记录方案，一条记录分为四个部分：
 // Header+记录总长度+字段长度数组+字段
@@ -19,10 +16,6 @@
 //   +-- tombstone
 //
 // 记录的分配按照4B对齐，同时要求block头部至少按照4B对齐。
-//
-// @author niexw
-// @email niexiaowen@uestc.edu.cn
-//
 #ifndef __DB_RECORD_H__
 #define __DB_RECORD_H__
 

@@ -1,11 +1,4 @@
-////
-// @file timestamp.h
-// @brief
 // 时戳
-//
-// @author niexw
-// @email niexiaowen@uestc.edu.cn
-//
 #ifndef __DB_TIMESTAMP_H__
 #define __DB_TIMESTAMP_H__
 

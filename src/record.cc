@@ -1,11 +1,4 @@
-////
-// @file record.cc
-// @brief
 // 实现物理记录
-//
-// @author niexw
-// @email niexiaowen@uestc.edu.cn
-//
 #include <db/record.h>
 
 namespace db {

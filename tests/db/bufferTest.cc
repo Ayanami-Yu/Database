@@ -1,11 +1,4 @@
-////
-// @file bufferTest.cc
-// @brief
-// buffer单元测试
-//
-// @author niexw
-// @email niexiaowen@uestc.edu.cn
-//
+// buffer 单元测试
 #include "../catch.hpp"
 #include <db/buffer.h>
 #include <db/file.h>

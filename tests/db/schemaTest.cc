@@ -1,10 +1,3 @@
-////
-// @file schemaTest.cc
-// @brief
-//
-// @author niexw
-// @email niexiaowen@uestc.edu.cn
-//
 #include "../catch.hpp"
 #include <db/schema.h>
 using namespace db;

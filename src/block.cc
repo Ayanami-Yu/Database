@@ -1,11 +1,4 @@
-////
-// @file block.cc
-// @brief
 // 实现block
-//
-// @author niexw
-// @email niexiaowen@uestc.edu.cn
-//
 #include <algorithm>
 #include <cmath>
 #include <db/block.h>

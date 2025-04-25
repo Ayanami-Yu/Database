@@ -1,10 +1,3 @@
-////
-// @file datatype.cc
-// @brief
-//
-// @author niexw
-// @email niexiaowen@uestc.edu.cn
-//
 #include <algorithm>
 #include <db/datatype.h>
 #include <db/block.h>

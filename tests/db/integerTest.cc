@@ -1,11 +1,4 @@
-////
-// @file integerTest.cc
-// @brief
 // 测试压缩整数
-//
-// @author niexw
-// @email niexiaowen@uestc.edu.cn
-//
 #include "../catch.hpp"
 #include <db/integer.h>
 using namespace db;

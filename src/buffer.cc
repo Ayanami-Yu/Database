@@ -1,11 +1,4 @@
-////
-// @file buffer.cc
-// @brief
-// 实现buffer
-//
-// @author niexw
-// @email niexiaowen@uestc.edu.cn
-//
+// 实现 buffer
 #include <malloc.h> // windows
 #include <db/buffer.h>
 #include <db/block.h>

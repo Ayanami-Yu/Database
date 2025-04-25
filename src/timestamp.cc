@@ -1,11 +1,4 @@
-////
-// @file timestamp.cc
-// @brief
 // 实现时辍
-//
-// @author niexw
-// @email niexiaowen@uestc.edu.cn
-//
 #include <stdio.h>
 #include <time.h>
 #include <string>

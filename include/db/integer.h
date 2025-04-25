@@ -1,11 +1,4 @@
-////
-// @file integer.h
-// @brief
 // 压缩整数
-//
-// @author niexw
-// @email niexiaowen@uestc.edu.cn
-//
 #ifndef __DB_INTEGER_H__
 #define __DB_INTEGER_H__
 

@@ -2,9 +2,6 @@
  * @file config.h.in
  * @brief
  * configure c/c++
- *
- * @author niexw
- * @email niexiaowen@uestc.edu.cn
  */
 #ifndef __DB_CONFIG_H__
 #define __DB_CONFIG_H__

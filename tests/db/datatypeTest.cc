@@ -1,10 +1,3 @@
-////
-// @file datatypeTest.cc
-// @brief
-//
-// @author niexw
-// @email niexiaowen@uestc.edu.cn
-//
 #include "../catch.hpp"
 #include <db/datatype.h>
 using namespace db;

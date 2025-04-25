@@ -1,11 +1,4 @@
-////
-// @file session.h
-// @brief
 // 客户会话
-//
-// @author niexw
-// @email niexiaowen@uestc.edu.cn
-//
 #ifndef __DB_SESSION_H__
 #define __DB_SESSION_H__
 

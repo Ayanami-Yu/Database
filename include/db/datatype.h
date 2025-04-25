@@ -1,12 +1,5 @@
-////
-// @file datatype.h
-// @brief
 // 定义数据类型
 // https://www.w3school.com.cn/sql/sql_datatypes.asp
-//
-// @author niexw
-// @email niexiaowen@uestc.edu.cn
-//
 #ifndef __DB_DATATYPE_H__
 #define __DB_DATATYPE_H__
 

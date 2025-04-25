@@ -1,10 +1,3 @@
-////
-// @file blockTest.cc
-// @brief
-//
-// @author niexw
-// @email niexiaowen@uestc.edu.cn
-//
 #include "../catch.hpp"
 #include <db/block.h>
 #include <db/record.h>
